@@ -1,0 +1,27 @@
+{
+  "name": "@harness-kit/core",
+  "version": "0.1.0",
+  "description": "Coding agent harness - orchestrates multi-agent workflows with hard fact verification",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "harness-verify": "bin/harness-verify"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "file:../../github-repo/pi-mono/packages/coding-agent",
+    "@mariozechner/pi-agent-core": "file:../../github-repo/pi-mono/packages/agent",
+    "@mariozechner/pi-ai": "file:../../github-repo/pi-mono/packages/ai",
+    "@sinclair/typebox": "^0.34.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
