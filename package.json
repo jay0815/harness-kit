@@ -2,10 +2,10 @@
   "name": "harness-kit",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter @harness-kit/core run build",
-    "test": "pnpm --filter @harness-kit/core run test",
-    "lint": "pnpm --filter @harness-kit/core run lint",
-    "typecheck": "pnpm --filter @harness-kit/core run typecheck"
+    "build": "pnpm --filter @harness-kit/agent run build && pnpm --filter @harness-kit/core run build",
+    "test": "pnpm -r --filter './packages/**' run test",
+    "lint": "pnpm -r --filter './packages/**' run lint",
+    "typecheck": "pnpm --filter @harness-kit/agent run typecheck && pnpm --filter @harness-kit/core run typecheck"
   },
   "engines": {
     "node": ">=20"

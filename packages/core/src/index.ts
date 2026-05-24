@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { HarnessExtensionAPI } from "@harness-kit/agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
@@ -16,7 +16,7 @@ import type { HarnessState } from "./types.js";
  *
  * Or load via pi's extension discovery.
  */
-export default function harnessKitExtension(pi: ExtensionAPI) {
+export default function harnessKitExtension(pi: HarnessExtensionAPI) {
   const workflow = createDefaultWorkflow();
   const harnessPrompt = buildHarnessPrompt(workflow);
   let workspaceDir = process.cwd();

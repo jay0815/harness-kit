@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { runAgentLoop } from "./agent-loop.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";
@@ -6,7 +6,6 @@ import type {
   AgentLoopConfig,
   AgentEvent,
   AgentTool,
-  AgentToolCall,
   AgentToolResult,
 } from "./types.js";
 
@@ -67,7 +66,7 @@ describe("runAgentLoop", () => {
       ),
     };
 
-    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => events.push(e));
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // messages should contain: assistant(toolCall) + tool result + final assistant text
     const roles = result.messages.map((m: any) => m.role);
@@ -100,7 +99,7 @@ describe("runAgentLoop", () => {
       ),
     };
 
-    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => events.push(e));
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // 3 LLM calls, 2 tool results, final text appended.
     expect(toolCallCount).toBe(2);
@@ -130,7 +129,7 @@ describe("runAgentLoop", () => {
       ),
     };
 
-    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => events.push(e));
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // Tool result should be marked as error
     const toolMsg = result.messages[1] as any;
@@ -154,7 +153,7 @@ describe("runAgentLoop", () => {
       streamFn: mockStream({ content: [{ type: "text", text: "Hello!" }] }),
     };
 
-    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => events.push(e));
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // Final text response should be appended to messages
     expect(result.messages).toHaveLength(1);
@@ -184,7 +183,7 @@ describe("runAgentLoop", () => {
     };
 
     // Budget of 2 — only 2 LLM calls allowed
-    const result = await runAgentLoop(config, makeBudget(2), new MiddlewarePipeline(), (e) => events.push(e));
+    const result = await runAgentLoop(config, makeBudget(2), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // Should have made 2 rounds of tool calls
     const toolMsgs = result.messages.filter((m: any) => m.role === "tool");
@@ -214,7 +213,7 @@ describe("runAgentLoop", () => {
       },
     };
 
-    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => events.push(e));
+    await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // Should have stopped after abort
     expect(callCount).toBe(2);

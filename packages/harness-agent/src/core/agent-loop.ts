@@ -1,8 +1,6 @@
 import type {
-  AgentContext,
   AgentEvent,
   AgentMessage,
-  AgentTool,
   AgentToolCall,
   AgentToolResult,
   AgentLoopConfig,
@@ -18,11 +16,14 @@ export interface AgentLoopResult {
   tokenUsage: TokenUsage;
 }
 
+export type AsyncEmit = (event: AgentEvent) => void | Promise<void>;
+
+
 export async function runAgentLoop(
   config: AgentLoopConfig,
   budget: IterationBudget,
   pipeline: MiddlewarePipeline,
-  emit: (event: AgentEvent) => void,
+  emit: AsyncEmit,
 ): Promise<AgentLoopResult> {
   const messages: AgentMessage[] = [];
   const tokenUsage: TokenUsage = {
@@ -57,7 +58,7 @@ export async function runAgentLoop(
 
     if (!budget.consume()) break;
 
-    emit({ type: "turn_start" });
+    await emit({ type: "turn_start" });
 
     // before_model chain
     await pipeline.runBeforeModel(state);
@@ -98,7 +99,7 @@ export async function runAgentLoop(
       // Pure text response — append and end
       messages.push({ role: "assistant", content: finalResponse.content } as any);
       state.context.messages = messages;
-      emit({
+      await emit({
         type: "turn_end",
         message: { role: "assistant", content: finalResponse.content } as any,
         toolResults: [],
@@ -127,7 +128,7 @@ export async function runAgentLoop(
     }
     state.context.messages = messages;
 
-    emit({
+    await emit({
       type: "turn_end",
       message: { role: "assistant", content: finalResponse.content } as any,
       toolResults: toolResults as any,
@@ -174,7 +175,7 @@ async function executeToolCalls(
   config: AgentLoopConfig,
   state: RuntimeState,
   pipeline: MiddlewarePipeline,
-  emit: (event: AgentEvent) => void,
+  emit: AsyncEmit,
 ): Promise<AgentToolResult<any>[]> {
   const results: AgentToolResult<any>[] = [];
   const tools = config.tools ?? [];
@@ -182,7 +183,7 @@ async function executeToolCalls(
   for (const toolCall of toolCalls) {
     const tool = tools.find((t) => t.name === toolCall.name);
 
-    emit({
+    await emit({
       type: "tool_execution_start",
       toolCallId: toolCall.id,
       toolName: toolCall.name,
@@ -193,7 +194,7 @@ async function executeToolCalls(
     const blocked = await pipeline.runBeforeTool(state, toolCall, tool);
     if (blocked !== null) {
       results.push(blocked);
-      emit({
+      await emit({
         type: "tool_execution_end",
         toolCallId: toolCall.id,
         toolName: toolCall.name,
@@ -221,7 +222,7 @@ async function executeToolCalls(
     result = await pipeline.runAfterTool(state, toolCall, tool, result);
     results.push(result);
 
-    emit({
+    await emit({
       type: "tool_execution_end",
       toolCallId: toolCall.id,
       toolName: toolCall.name,

@@ -6,3 +6,4 @@ export * from "./core/agent-b.js";
 export * from "./core/streaming-tool-executor.js";
 export * from "./core/change-tracker.js";
 export * from "./core/middlewares.js";
+export * from "./session/index.js";

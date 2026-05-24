@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "oxlint src/"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "oxlint": "^1.66.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }

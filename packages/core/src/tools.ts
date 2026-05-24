@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { ToolDefinition } from "@harness-kit/agent";
 import type { Fact } from "./types.js";
 import {
   createPane,
