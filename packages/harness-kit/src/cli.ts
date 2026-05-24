@@ -17,13 +17,16 @@ function main(): void {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--input":
-        inputFile = args[++i];
+        if (++i >= args.length) usage();
+        inputFile = args[i];
         break;
       case "--workspace":
-        workspaceDir = resolve(args[++i]!);
+        if (++i >= args.length) usage();
+        workspaceDir = resolve(args[i]);
         break;
       case "--output":
-        outputFile = args[++i];
+        if (++i >= args.length) usage();
+        outputFile = args[i];
         break;
       default:
         usage();

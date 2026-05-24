@@ -19,7 +19,7 @@ export interface WorkflowExecutorOptions {
 export interface LlmExecutor {
   execute(
     phase: PhaseConfig,
-    context: { previousResults: Map<string, string> },
+    context: { previousResults: Map<string, string>; signal?: AbortSignal },
   ): Promise<{ success: boolean; output: string }>;
 }
 
@@ -93,17 +93,45 @@ async function executePhase(
   }
 
   const startTime = Date.now();
-  const result = await context.llmExecutor.execute(phase, {
-    previousResults: context.outputs,
-  });
+  const timeoutMs = context.timeoutMs;
 
-  return {
-    phaseName: phase.name,
-    executor: "llm",
-    success: result.success,
-    output: result.output,
-    durationMs: Date.now() - startTime,
-  };
+  let signal: AbortSignal | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let controller: AbortController | undefined;
+
+  if (timeoutMs && timeoutMs > 0) {
+    controller = new AbortController();
+    signal = controller.signal;
+    timer = setTimeout(() => controller!.abort(), timeoutMs);
+  }
+
+  try {
+    const result = await context.llmExecutor.execute(phase, {
+      previousResults: context.outputs,
+      signal,
+    });
+
+    return {
+      phaseName: phase.name,
+      executor: "llm",
+      success: result.success,
+      output: result.output,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (err) {
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    return {
+      phaseName: phase.name,
+      executor: "llm",
+      success: false,
+      output: isAbort
+        ? `Error: LLM phase "${phase.name}" timed out after ${timeoutMs}ms`
+        : `Error: ${err instanceof Error ? err.message : String(err)}`,
+      durationMs: Date.now() - startTime,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function executePhaseDryRun(

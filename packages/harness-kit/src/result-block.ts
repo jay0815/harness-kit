@@ -32,16 +32,26 @@ function validateResultBlock(parsed: unknown): ResultBlock | null {
 
   if (typeof p.currentWork !== "string") return null;
 
-  const facts = Array.isArray(p.facts)
-    ? p.facts
-        .map((f) => validateFact(f))
-        .filter((f): f is NonNullable<typeof f> => f !== null)
-    : [];
+  const warnings: string[] = [];
+  let facts: ResultBlock["facts"];
+
+  if (Array.isArray(p.facts)) {
+    const raw = p.facts;
+    const validated = raw.map((f) => validateFact(f));
+    const dropped = raw.length - validated.filter((f) => f !== null).length;
+    if (dropped > 0) {
+      warnings.push(`Dropped ${dropped} of ${raw.length} invalid facts`);
+    }
+    facts = validated.filter((f): f is NonNullable<typeof f> => f !== null);
+  } else {
+    facts = [];
+  }
 
   return {
     currentWork: p.currentWork,
     facts,
     reasoning: typeof p.reasoning === "string" ? p.reasoning : undefined,
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }
 

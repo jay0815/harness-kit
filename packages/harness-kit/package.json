@@ -16,12 +16,13 @@
     "lint": "oxlint src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "tsx scripts/test-e2e-direct.ts"
+    "test:e2e": "tsx scripts/test-e2e-direct.ts",
+    "pi": "pi"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "file:../../github-repo/pi-mono/packages/coding-agent",
-    "@mariozechner/pi-agent-core": "file:../../github-repo/pi-mono/packages/agent",
-    "@mariozechner/pi-ai": "file:../../github-repo/pi-mono/packages/ai",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-ai": "^0.73.1",
     "@sinclair/typebox": "^0.34.0",
     "yaml": "^2.7.0"
   },

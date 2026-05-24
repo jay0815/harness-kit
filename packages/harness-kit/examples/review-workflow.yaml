@@ -22,15 +22,15 @@ phases:
     executor: code
     command: |
       echo "=== 源文件统计 ==="
-      find harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "源文件数量:"
-      find harness-kit/src -name "*.ts" ! -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "源代码行数:"
+      find packages/harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "源文件数量:"
+      find packages/harness-kit/src -name "*.ts" ! -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "源代码行数:"
       echo ""
       echo "=== 测试文件统计 ==="
-      find harness-kit/src -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "测试文件数量:"
-      find harness-kit/src -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "测试代码行数:"
+      find packages/harness-kit/src -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "测试文件数量:"
+      find packages/harness-kit/src -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "测试代码行数:"
       echo ""
       echo "=== 模块列表 ==="
-      find harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | sort
+      find packages/harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | sort
 
   # Phase 5: LLM 综合 review
   - name: review

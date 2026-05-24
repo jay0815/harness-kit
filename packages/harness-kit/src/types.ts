@@ -18,6 +18,8 @@ export interface ResultBlock {
   facts: Fact[];
   /** Reasoning / notes */
   reasoning?: string;
+  /** Warnings generated during parsing (e.g. dropped facts) */
+  warnings?: string[];
 }
 
 export interface Phase {

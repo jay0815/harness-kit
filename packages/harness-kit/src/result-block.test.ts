@@ -54,3 +54,27 @@ describe("hasCompleteResultBlock", () => {
     expect(hasCompleteResultBlock("<HK_RESULT>{")).toBe(false);
   });
 });
+
+describe("fact validation warnings", () => {
+  it("warns when facts are dropped", () => {
+    const block = `<HK_RESULT>{
+      "currentWork": "test",
+      "facts": [
+        { "file": "a.ts", "startLine": 1, "endLine": 2, "exactText": "ok" },
+        { "file": 123, "startLine": 1, "endLine": 2, "exactText": "bad" },
+        { "file": "b.ts", "startLine": 1, "endLine": 2, "exactText": "ok" }
+      ]
+    }</HK_RESULT>`;
+    const result = extractResultBlock(block);
+    expect(result).not.toBeNull();
+    expect(result!.facts).toHaveLength(2);
+    expect(result!.warnings).toHaveLength(1);
+    expect(result!.warnings![0]).toContain("Dropped 1 of 3");
+  });
+
+  it("no warnings when all facts valid", () => {
+    const result = extractResultBlock(validBlock);
+    expect(result).not.toBeNull();
+    expect(result!.warnings).toBeUndefined();
+  });
+});

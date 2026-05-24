@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
+import { resolve, relative, isAbsolute } from "node:path";
 import type { Fact, VerifyReport, VerifyCheck } from "./types.js";
 
 /**
@@ -18,7 +18,48 @@ export function verifyFacts(facts: Fact[], workspaceDir: string): VerifyReport {
 }
 
 function verifyOneFact(fact: Fact, workspaceDir: string): VerifyCheck {
-  const absPath = resolve(workspaceDir, fact.file);
+  if (isAbsolute(fact.file)) {
+    return {
+      fact,
+      status: "FAIL",
+      error: `Absolute path not allowed: ${fact.file}`,
+    };
+  }
+
+  // Resolve workspace to real path (follows symlinks like macOS /var → /private/var)
+  let realWorkspace: string;
+  try {
+    realWorkspace = realpathSync(workspaceDir);
+  } catch {
+    realWorkspace = workspaceDir;
+  }
+
+  const absPath = resolve(realWorkspace, fact.file);
+  const rel = relative(realWorkspace, absPath);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    return {
+      fact,
+      status: "FAIL",
+      error: `Path escapes workspace: ${fact.file}`,
+    };
+  }
+
+  // Reject symlinks that point outside workspace
+  let realAbsPath: string;
+  try {
+    realAbsPath = realpathSync(absPath);
+  } catch {
+    // File doesn't exist — readFileSync below will handle this
+    realAbsPath = absPath;
+  }
+  const realRel = relative(realWorkspace, realAbsPath);
+  if (realRel.startsWith("..") || isAbsolute(realRel)) {
+    return {
+      fact,
+      status: "FAIL",
+      error: `Symlink escapes workspace: ${fact.file}`,
+    };
+  }
 
   let content: string;
   try {

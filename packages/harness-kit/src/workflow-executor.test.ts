@@ -197,4 +197,170 @@ phases:
       new Date(run.completedAt!).getTime(),
     );
   });
+
+  it("aborts LLM phase on timeout", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: slow-llm
+    executor: llm
+    prompt: Think hard
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    const llmExecutor: LlmExecutor = {
+      execute: async (_phase, ctx) => {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 5000);
+          ctx.signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+        return { success: true, output: "done" };
+      },
+    };
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+      timeoutMs: 100,
+    });
+
+    expect(run.overallSuccess).toBe(false);
+    expect(run.phases[0].success).toBe(false);
+    expect(run.phases[0].output).toContain("timed out");
+  });
+
+  it("completes LLM phase before timeout", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: fast-llm
+    executor: llm
+    prompt: Quick task
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    const llmExecutor: LlmExecutor = {
+      execute: async () => {
+        return { success: true, output: "done fast" };
+      },
+    };
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+      timeoutMs: 5000,
+    });
+
+    expect(run.overallSuccess).toBe(true);
+    expect(run.phases[0].output).toBe("done fast");
+  });
+
+  it("passes abort signal to LLM executor", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: tracked
+    executor: llm
+    prompt: Track signal
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    let receivedSignal: AbortSignal | undefined;
+    const llmExecutor: LlmExecutor = {
+      execute: async (_phase, ctx) => {
+        receivedSignal = ctx.signal;
+        return { success: true, output: "ok" };
+      },
+    };
+
+    await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+      timeoutMs: 5000,
+    });
+
+    expect(receivedSignal).toBeDefined();
+    expect(receivedSignal!.aborted).toBe(false);
+  });
+
+  it("aborts signal when LLM times out", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: slow
+    executor: llm
+    prompt: Slow task
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    let receivedSignal: AbortSignal | undefined;
+    const llmExecutor: LlmExecutor = {
+      execute: async (_phase, ctx) => {
+        receivedSignal = ctx.signal;
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 5000);
+          ctx.signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+        return { success: true, output: "done" };
+      },
+    };
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+      timeoutMs: 100,
+    });
+
+    expect(run.overallSuccess).toBe(false);
+    expect(receivedSignal).toBeDefined();
+    expect(receivedSignal!.aborted).toBe(true);
+  });
+
+  it("no timeout when timeoutMs not specified", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: no-timeout
+    executor: llm
+    prompt: No rush
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    let receivedSignal: AbortSignal | undefined;
+    const llmExecutor: LlmExecutor = {
+      execute: async (_phase, ctx) => {
+        receivedSignal = ctx.signal;
+        return { success: true, output: "done" };
+      },
+    };
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+    });
+
+    expect(run.overallSuccess).toBe(true);
+    expect(receivedSignal).toBeUndefined();
+  });
 });

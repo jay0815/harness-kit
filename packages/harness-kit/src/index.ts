@@ -83,6 +83,10 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
       currentWork: block?.currentWork?.slice(0, 100),
     });
 
+    if (block?.warnings && block.warnings.length > 0) {
+      emit("hk_result", "warnings", { warnings: block.warnings });
+    }
+
     if (!block || block.facts.length === 0) return;
 
     const t0 = Date.now();
@@ -141,13 +145,21 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
         phaseSnapshot = afterSnapshot;
       }
 
-      saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
-      phase.status = "completed";
-      phase.completedAt = new Date().toISOString();
-      harnessState.currentPhase++;
-      harnessState.updatedAt = new Date().toISOString();
-      saveState(harnessState, workspaceDir);
-      emit("state", "phase_completed", { phase: harnessState.currentPhase - 1, name: phase.name });
+      try {
+        saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
+        phase.status = "completed";
+        phase.completedAt = new Date().toISOString();
+        harnessState.currentPhase++;
+        harnessState.updatedAt = new Date().toISOString();
+        saveState(harnessState, workspaceDir);
+        emit("state", "phase_completed", { phase: harnessState.currentPhase - 1, name: phase.name });
+      } catch (err) {
+        emit("state", "save_failed", {
+          phase: harnessState.currentPhase,
+          phaseName: phase.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   });
 

@@ -61,15 +61,17 @@ export async function executeCode(options: ExecuteCodeOptions): Promise<PhaseRes
       durationMs: Date.now() - startTime,
     };
   } catch (err: unknown) {
-    const execErr = err as ExecSyncError;
-    const stdout = execErr.stdout?.toString("utf-8")?.trim() ?? "";
-    const stderr = execErr.stderr?.toString("utf-8")?.trim() ?? "";
+    const isExecError = err instanceof Error && "status" in err;
+    const execErr = isExecError ? (err as ExecSyncError) : null;
+    const stdout = execErr?.stdout?.toString("utf-8")?.trim() ?? "";
+    const stderr = execErr?.stderr?.toString("utf-8")?.trim() ?? "";
+    const fallback = err instanceof Error ? err.message : String(err);
 
     return {
       phaseName: phase.name,
       executor: "code",
       success: false,
-      output: [stdout, stderr].filter(Boolean).join("\n") || `Exit code: ${execErr.status}`,
+      output: [stdout, stderr].filter(Boolean).join("\n") || `Exit code: ${execErr?.status ?? "unknown"}: ${fallback}`,
       durationMs: Date.now() - startTime,
     };
   }

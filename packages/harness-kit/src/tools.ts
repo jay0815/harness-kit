@@ -59,10 +59,11 @@ export const startAgentTool: ToolDefinition<typeof startAgentSchema> = {
       labelPane(paneId, params.role);
       emit("pane_event", "create", { paneId, role: params.role });
 
-      let cmd = params.executor;
+      // Shell-quote executor and contextFiles to prevent injection
+      const escape = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+      let cmd = escape(params.executor);
       if (params.contextFiles && params.contextFiles.length > 0) {
-        // Escape paths with spaces using shell quoting
-        const escapedFiles = params.contextFiles.map((f) => `'${f.replace(/'/g, "'\\''")}'`);
+        const escapedFiles = params.contextFiles.map(escape);
         cmd += ` ${escapedFiles.join(" ")}`;
       }
 

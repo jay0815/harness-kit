@@ -11,6 +11,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.73.1"
+    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "pi-kimi-coder": "^1.1.0"
   }
 }
