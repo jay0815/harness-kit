@@ -2,52 +2,69 @@
 
 > 让 coding agent 可靠运行的编排层。
 
-harness-kit 是一个 **PI Extension**，它通过 tmux pane 驱动多个 coding agent（Claude Code、Codex 等）完成结构化的 workflow，并用**硬校验**确保 agent 真实阅读了文件、没有编造事实。
+harness-kit 提供一个独立的 agent runtime 和可选的 PI Extension 层，通过结构化 workflow 和**硬事实校验**确保 agent 真实阅读了文件、没有编造事实。
+
+## 为什么从"编排外部 agent"转向"自己就是 agent"
+
+两条旧路都走不通：
+
+| 方案 | 问题 |
+|------|------|
+| **PI + ACP 调度外部 agent**（Claude Code、Codex） | agent 是黑盒，tmux-bridge IPC 文本解析脆弱，绑定 PI 框架的生命周期和事件模型 |
+| **Claude Code SDK 直调** | 锁死单一 provider，无法支持 Codex 等其他 agent，不够通用 |
+
+新方向：**自己拥有 agent loop**。主路径是直接 LLM 调用 + middleware pipeline（事实校验、上下文压缩、workspace guardrail、遥测采集）。Claude Code 和 Codex 作为 subagent 通过 CLI 调度（`claude -p`、`codex`），harness 给足上下文、限定范围、让其只执行一件事，结果通过 `<HK_RESULT>` 结构化回传。调度权在自己手里，不绑定任何单一 provider 或框架。
 
 ## 核心理念
 
-**Agent = Model + Harness**。模型负责"想"，harness 负责"管"。harness-kit 不重新发明 agent loop——它包裹在现有 coding agent 之外，负责：
+**Agent = Model + Harness**。模型负责"想"，harness 负责"管"：
 
-1. **Workflow 编排** — 按预设阶段（设计→实现→测试）驱动 agent 完成任务
-2. **多 agent 协同** — 通过 tmux pane + ACP 让不同 LLM 实例相互验证
-3. **事实硬校验** — LLM 声明事实（文件路径+行号+原文），独立 CLI 实际读盘比对
+1. **Agent Runtime** — 独立的 agent loop，支持 middleware pipeline、工具执行、双 agent 架构（A 编排 / B 执行）
+2. **事实硬校验** — LLM 声明事实（文件路径+行号+原文），独立 CLI 实际读盘比对
+3. **PI Extension（可选）** — 在 PI 框架内运行时，注入 workflow system prompt、自动校验 `<HK_RESULT>` 输出
 
-## 架构
-
-```
-PI Agent (harness-kit extension)
-  ├── start_agent  → 创建 tmux pane，启动 coding agent
-  ├── acp_send     → 发送结构化任务（要求 <HK_RESULT> 输出）
-  ├── acp_read     → 读取 pane 输出，提取结果块
-  └── hard_verify  → 比对声称的文本与磁盘实际内容
-```
+## 包结构
 
 ```
-┌─────────────────┐     ACP      ┌─────────────┐
-│ harness-kit     │ ───────────> │ pane:codex  │
-│ (PI Extension)  │              │  需求理解   │
-│                 │     ACP      ├─────────────┤
-│ 4 tools         │ ───────────> │ pane:claude │
-│ system prompt   │              │  设计       │
-│ workflow YAML   │     ACP      ├─────────────┤
-└─────────────────┘ ───────────> │ pane:codex  │
-                                │  编码       │
-                                └─────────────┘
+packages/
+├── harness-agent/     @harness-kit/agent — 独立 agent runtime + CLI
+└── core/              @harness-kit/core  — PI Extension 层（硬校验、workflow、telemetry）
 ```
+
+### @harness-kit/agent
+
+独立 agent runtime，不依赖 PI 框架即可运行：
+
+- **agent-loop** — 多轮 LLM 调用 + 工具执行循环，支持 iteration budget 和 abort signal
+- **middleware pipeline** — beforeModel / afterModel / beforeTool / afterTool 钩子，按优先级执行
+- **dual-agent** — Agent A（任务评估+编排）→ Agent B（实际执行），支持任务结果累积
+- **session** — HarnessAgentSession 封装完整生命周期，ExtensionAPI 提供事件订阅
+- **CLI** — 交互式 REPL，支持多 provider（anthropic、openai、deepseek 等）
+
+### @harness-kit/core
+
+PI Extension 层，包裹在 agent runtime 之上：
+
+- **`<HK_RESULT>` 校验** — 提取 agent 输出的事实声明，读盘逐字比对
+- **workspace guardrails** — 检测越界文件访问
+- **workflow 执行** — YAML 定义的多阶段 workflow（fail-stop、模板替换、dry-run）
+- **telemetry** — JSONL 格式的运行日志
+- **状态持久化** — session 恢复和去重
 
 ## 快速开始
 
 ```bash
-cd packages/harness-kit
-npm install
-npm run build
+pnpm install
+pnpm run build
 
-# 作为 PI 扩展加载
-pi --extension ./dist/index.js
+# 独立 CLI（需要 API key）
+pnpm run harness -- --provider anthropic --model claude-sonnet-4-20250514
 
-# 或使用独立 CLI 进行硬校验
-./bin/harness-verify --input facts.json --workspace ./
+# 或通过 npx
+npx harness-agent --help
 ```
+
+CLI 默认加载 `@harness-kit/core` 扩展（如果可用）。用 `--no-extension` 进入 bare 模式。
 
 ## Agent 输出契约
 
@@ -70,45 +87,26 @@ pi --extension ./dist/index.js
 </HK_RESULT>
 ```
 
-harness-kit 会提取这些事实声明，用 `harness-verify` CLI 实际读取文件并逐字比对。**硬校验只验证"引用是否真实"，不验证"结论是否正确"**。
+harness-kit 提取这些事实声明，用 `harness-verify` CLI 实际读取文件并逐字比对。**硬校验只验证"引用是否真实"，不验证"结论是否正确"**。
 
-## 项目结构
+## 命令
 
-```
-packages/harness-kit/
-├── src/
-│   ├── index.ts          # PI Extension 入口，注入 workflow system prompt
-│   ├── tools.ts          # 4 个 PI 工具定义
-│   ├── pane.ts           # tmux pane 生命周期管理
-│   ├── result-block.ts   # <HK_RESULT> 块解析器
-│   ├── verify.ts         # 硬校验逻辑（读盘比对）
-│   ├── workflow.ts       # 硬编码 3 阶段 workflow
-│   ├── types.ts          # 共享类型
-│   └── cli.ts            # harness-verify CLI 入口
-├── bin/
-│   └── harness-verify    # 独立可执行脚本
-├── examples/
-│   └── demo.yaml         # 示例 workflow 配置
-└── AGENTS.md             # 面向 coding agent 的开发者指南
+```bash
+pnpm install              # 安装依赖
+pnpm run build            # 构建所有包
+pnpm run test             # vitest 测试
+pnpm run lint             # oxlint 检查
+pnpm run typecheck        # tsc --noEmit
+pnpm run harness          # 运行 CLI
 ```
 
 ## 设计文档
 
 | 文档 | 内容 |
 |------|------|
+| [wiki](wiki/index.md) | 知识库索引：架构、技术栈、协议、设计决策 |
 | [design doc](docs/superpowers/specs/2026-05-02-harness-kit-design.md) | 完整架构设计、MVP 范围、演进路线 |
-| [harness engineering 调研](docs/research/04-harness-engineering.md) | "仓库即记录系统 + 机械化执行" 方法论 |
-| [PI 框架调研](docs/research/05-pi-mono.md) | PI 扩展机制、生命周期事件、工具系统 |
-| [browser-harness 调研](docs/research/02-browser-harness.md) | "反框架"哲学——原语暴露、薄层设计 |
-| [harness-books 调研](docs/research/03-harness-books.md) | "Prompt 决定怎么说，Harness 决定怎么做" |
-
-## 测试
-
-```bash
-cd packages/harness-kit
-npm run build
-node --test dist/*.test.js
-```
+| [Phase 3 plan](docs/phase3-plan.md) | standalone CLI 实现计划 |
 
 ## License
 
