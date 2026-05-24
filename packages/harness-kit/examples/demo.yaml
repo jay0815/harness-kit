@@ -3,27 +3,28 @@ description: "A minimal demo workflow for harness-kit MVP"
 
 phases:
   - name: "design"
-    executor: "claude-code"
+    executor: "self"
     prompt: |
-      Read docs/requirements.md and design a simple feature.
+      Read the task requirements. Design the implementation.
       Output your design in a <HK_RESULT> block.
       Include facts for every file you reference.
-    contextFiles: ["docs/requirements.md"]
+    contextFiles: []
     humanConfirm: true
 
   - name: "implement"
-    executor: "codex"
+    executor: "self"
     prompt: |
-      Read output/design.md and implement the feature.
-      Output your implementation summary in a <HK_RESULT> block.
-      Include facts for every file you modified.
-    contextFiles: ["output/design.md"]
+      Implement the design. Create/modify the files.
+      Output a <HK_RESULT> block with facts for every file you created or modified.
+      Each fact must cite the exact text that exists on disk after your changes.
+    contextFiles: []
     humanConfirm: false
 
   - name: "test"
-    executor: "codex"
+    executor: "self"
     prompt: |
-      Write and run tests for the implementation.
-      Output test results in a <HK_RESULT> block.
-    contextFiles: ["output/design.md", "src/"]
+      Write unit tests and run them. Fix any failures.
+      Output a <HK_RESULT> block with facts for test files you created,
+      and report test results (pass/fail count).
+    contextFiles: []
     humanConfirm: true

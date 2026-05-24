@@ -38,56 +38,47 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
 
 function buildHarnessPrompt(workflow: ReturnType<typeof createDefaultWorkflow>): string {
   const phaseList = workflow.phases
-    .map((p, i) => `${i + 1}. ${p.name} (executor: ${p.executor}, humanConfirm: ${p.humanConfirm})`)
+    .map((p, i) => {
+      const confirm = p.humanConfirm ? " [human confirm required]" : "";
+      return `${i + 1}. **${p.name}**${confirm}: ${p.prompt}`;
+    })
     .join("\n");
 
-  return `## harness-kit Workflow Orchestrator
+  return `## harness-kit Workflow
 
-You are the harness-kit orchestrator. Your job is to drive coding agents through a structured workflow using the tools available to you.
+You are a coding agent guided by a structured workflow. Complete each phase in order.
 
-### Current Workflow: ${workflow.name}
+### Workflow: ${workflow.name}
 ${workflow.description}
 
 ### Phases
 ${phaseList}
 
-### How to drive a phase
+### How to work
 
-1. **Start the executor agent** with \`start_agent\`:
-   - role: "executor" or "validator"
-   - executor: the coding agent command (e.g. "claude-code", "codex")
+1. **Execute each phase** by reading context files, writing code, and producing results.
 
-2. **Send the task** with \`acp_send\`:
-   - target: the role you started
-   - task: the phase prompt + any context
-   - The agent will respond with a \`<HK_RESULT>\` block
+2. **After each phase**, output a \`<HK_RESULT>\` block:
+   \`\`\`
+   <HK_RESULT>
+   {
+     "currentWork": "what you did in this phase",
+     "facts": [
+       { "file": "relative/path.ts", "startLine": 1, "endLine": 5, "exactText": "exact text from file" }
+     ],
+     "reasoning": "optional notes"
+   }
+   </HK_RESULT>
+   \`\`\`
 
-3. **Poll for response** with \`acp_read\`:
-   - target: the same role
-   - Check the \`status\` in the result details:
-     - "COMPLETE": agent finished, result block extracted
-     - "PENDING": agent still working, wait and read again
-     - "MALFORMED": agent produced a block but JSON is bad
+3. **Verify your facts** with \`hard_verify\` before moving to the next phase.
 
-4. **Verify facts** with \`hard_verify\`:
-   - Pass the \`facts\` array from the result block
-   - If overall is "FAIL", STOP and report the failure
+4. **If human confirmation is required**, pause and ask the user before proceeding.
 
-5. **Human confirmation** (if phase.humanConfirm is true):
-   - Summarize the result for the user
-   - Ask for confirmation before proceeding
+### Rules
 
-6. **Validation phase** (after executor completes):
-   - Start a validator agent (different executor)
-   - Send the executor's result + original task to validator
-   - Validator checks: direction correct, no deviation, input/output consistent
-   - If validator rejects, STOP and report
-
-### Important Rules
-
-- ALWAYS verify facts with \`hard_verify\` before accepting agent output
-- If hard_verify FAILs, do NOT proceed. Report the failure.
-- If a pane dies (acp_send/acp_read returns PANE_DEAD), report it.
-- Agents may take time to respond. Poll \`acp_read\` until status is COMPLETE.
-- The \`<HK_RESULT>\` block is the ONLY valid output format from agents.`;
+- Every \`fact\` must cite real file content: exact file path, line range, and text.
+- Run \`hard_verify\` on your own facts. If FAIL, fix the issue before continuing.
+- The \`<HK_RESULT>\` block is your ONLY structured output boundary.
+- Work through all phases sequentially. Do not skip phases.`;
 }

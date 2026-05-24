@@ -2,8 +2,7 @@ import type { Workflow } from "./types.js";
 
 /**
  * Hardcoded MVP workflow: design -> implement -> test.
- * Each phase has one executor. Validation is done by a separate
- * validator agent after each phase (configured in harness-kit tools).
+ * In degraded mode, PI itself executes all phases.
  */
 export function createDefaultWorkflow(): Workflow {
   return {
@@ -12,34 +11,32 @@ export function createDefaultWorkflow(): Workflow {
     phases: [
       {
         name: "design",
-        executor: "claude-code",
+        executor: "self",
         prompt:
-          "Read the requirements and design the implementation. " +
-          "Output your design inside a <HK_RESULT> block. " +
-          "For every file you reference, include a fact with file path, " +
-          "line range, and exact text.",
-        contextFiles: ["docs/requirements.md"],
+          "Read the task requirements. Design the implementation: " +
+          "what files to create/modify, what functions to write, what the API looks like. " +
+          "Output your design in a <HK_RESULT> block with facts for every file you reference.",
+        contextFiles: [],
         humanConfirm: true,
       },
       {
         name: "implement",
-        executor: "codex",
+        executor: "self",
         prompt:
-          "Implement the feature based on the design document. " +
-          "Output your changes inside a <HK_RESULT> block. " +
-          "For every file you modified, include a fact with file path, " +
-          "line range, and exact text from the modified file.",
-        contextFiles: ["output/design.md"],
+          "Implement the design. Create/modify the files. " +
+          "Output a <HK_RESULT> block with facts for every file you created or modified. " +
+          "Each fact must cite the exact text that exists on disk after your changes.",
+        contextFiles: [],
         humanConfirm: false,
       },
       {
         name: "test",
-        executor: "codex",
+        executor: "self",
         prompt:
-          "Write and run tests for the implementation. " +
-          "Output test results inside a <HK_RESULT> block. " +
-          "Include facts for any code you referenced.",
-        contextFiles: ["output/design.md", "src/"],
+          "Write unit tests and run them. Fix any failures. " +
+          "Output a <HK_RESULT> block with facts for test files you created, " +
+          "and report test results (pass/fail count).",
+        contextFiles: [],
         humanConfirm: true,
       },
     ],

@@ -15,5 +15,8 @@ dist/
 # Logs
 *.log
 
+# Harness-kit runtime output (telemetry logs)
+.harness-kit/
+
 # GitHub repos (local clones, not part of this project)
 github-repo/
