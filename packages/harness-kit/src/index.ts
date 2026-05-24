@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
 import { createDefaultWorkflow } from "./workflow.js";
+import { initTelemetry, close as closeTelemetry } from "./telemetry.js";
 
 /**
  * Harness-kit PI Extension entry point.
@@ -16,6 +17,12 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     setWorkspaceDir(ctx.cwd);
+    initTelemetry();
+  });
+
+  // Flush telemetry on process exit (PI has no session_end event)
+  process.on("beforeExit", () => {
+    closeTelemetry();
   });
 
   // Register all harness-kit tools

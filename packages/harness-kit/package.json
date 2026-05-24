@@ -6,12 +6,14 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "harness-verify": "bin/harness-verify"
+    "harness-verify": "bin/harness-verify",
+    "harness-telemetry": "bin/harness-telemetry"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "node --test dist/**/*.test.js"
+    "test": "node --test dist/**/*.test.js",
+    "test:e2e": "npx tsx scripts/test-e2e-direct.ts"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "file:../../github-repo/pi-mono/packages/coding-agent",
