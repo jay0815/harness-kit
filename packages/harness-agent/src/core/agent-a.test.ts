@@ -7,10 +7,13 @@ function makeModel(): Model<any> {
 }
 
 function makeStreamFn(): StreamFn {
-  return vi.fn().mockImplementation(async function* () {
-    yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-    yield { type: "message_stop" };
-  }) as any;
+  return vi.fn().mockImplementation(async () => ({
+    result: async () => ({
+      content: [{ type: "text", text: "ok" }],
+      stopReason: "end_turn",
+      usage: { input: 100, output: 50 },
+    }),
+  })) as any;
 }
 
 describe("AgentA", () => {

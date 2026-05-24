@@ -21,13 +21,17 @@ function mockStream(...responses: Array<{ content: any[]; stopReason?: string }>
     _opts: any,
   ) => {
     const resp = responses[Math.min(callIndex++, responses.length - 1)];
-    return (async function* () {
-      for (const block of resp.content) {
-        yield { type: "content_block_delta", delta: block };
-      }
-      yield { type: "message_stop", stopReason: resp.stopReason ?? "end_turn" };
-      yield { type: "usage", inputTokens: 100, outputTokens: 50 };
-    })();
+    return {
+      result: async () => ({
+        content: resp.content.map((c) =>
+          c.type === "toolCall"
+            ? { ...c, input: c.input ?? c.arguments }
+            : c
+        ),
+        stopReason: resp.stopReason ?? "end_turn",
+        usage: { input: 100, output: 50 },
+      }),
+    };
   };
 }
 
@@ -70,7 +74,7 @@ describe("runAgentLoop", () => {
 
     // messages should contain: assistant(toolCall) + tool result + final assistant text
     const roles = result.messages.map((m: any) => m.role);
-    expect(roles).toEqual(["assistant", "tool", "assistant"]);
+    expect(roles).toEqual(["assistant", "toolResult", "assistant"]);
 
     // Tool result message should have the file content
     const toolMsg = result.messages[1] as any;
@@ -105,9 +109,9 @@ describe("runAgentLoop", () => {
     expect(toolCallCount).toBe(2);
     const roles = result.messages.map((m: any) => m.role);
     expect(roles).toEqual([
-      "assistant", "tool",  // round 1
-      "assistant", "tool",  // round 2
-      "assistant",          // final text
+      "assistant", "toolResult",  // round 1
+      "assistant", "toolResult",  // round 2
+      "assistant",                // final text
     ]);
   });
 
@@ -186,7 +190,7 @@ describe("runAgentLoop", () => {
     const result = await runAgentLoop(config, makeBudget(2), new MiddlewarePipeline(), (e) => { events.push(e); });
 
     // Should have made 2 rounds of tool calls
-    const toolMsgs = result.messages.filter((m: any) => m.role === "tool");
+    const toolMsgs = result.messages.filter((m: any) => m.role === "toolResult");
     expect(toolMsgs).toHaveLength(2);
   });
 
@@ -217,5 +221,135 @@ describe("runAgentLoop", () => {
 
     // Should have stopped after abort
     expect(callCount).toBe(2);
+  });
+
+  it("consumes stream.result() correctly", async () => {
+    const events: AgentEvent[] = [];
+
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: mockStream({ content: [{ type: "text", text: "Hello!" }] }),
+    };
+
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
+
+    expect(result.messages).toHaveLength(1);
+    expect((result.messages[0] as any).content[0].text).toBe("Hello!");
+    expect(result.tokenUsage.inputTokens).toBe(100);
+    expect(result.tokenUsage.outputTokens).toBe(50);
+  });
+
+  it("throws on stream.result() rejection", async () => {
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: (async () => ({
+        result: async () => { throw new Error("stream failed"); },
+      })) as any,
+    };
+
+    await expect(
+      runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), () => {}),
+    ).rejects.toThrow("LLM stream failed: stream failed");
+  });
+
+  it("throws on error stopReason", async () => {
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: (async () => ({
+        result: async () => ({
+          content: [],
+          stopReason: "error",
+          errorMessage: "rate limited",
+          usage: undefined,
+        }),
+      })) as any,
+    };
+
+    await expect(
+      runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), () => {}),
+    ).rejects.toThrow("LLM response stopped: error - rate limited");
+  });
+
+  it("throws on aborted stopReason", async () => {
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: (async () => ({
+        result: async () => ({
+          content: [],
+          stopReason: "aborted",
+          usage: undefined,
+        }),
+      })) as any,
+    };
+
+    await expect(
+      runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), () => {}),
+    ).rejects.toThrow("LLM response stopped: aborted");
+  });
+
+  it("preserves arguments and adds input for toolCall", async () => {
+    const tool = makeTool("read_file", async (_id, args) => textResult(JSON.stringify(args)));
+    const events: AgentEvent[] = [];
+
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [tool],
+      contextWindow: 200_000,
+      streamFn: mockStream(
+        { content: [{ type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/f" } }] },
+        { content: [{ type: "text", text: "done" }] },
+      ),
+    };
+
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
+
+    // Tool should have received args with input field
+    const toolMsg = result.messages.find((m: any) => m.role === "toolResult");
+    expect(toolMsg).toBeDefined();
+    expect(JSON.parse((toolMsg as any).content[0].text)).toEqual({ path: "/f" });
+  });
+
+  it("uses toolResult role with toolName and timestamp", async () => {
+    const tool = makeTool("grep", async () => textResult("match"));
+    const events: AgentEvent[] = [];
+
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [tool],
+      contextWindow: 200_000,
+      streamFn: mockStream(
+        { content: [toolCallBlock("tc1", "grep", { query: "foo" })] },
+        { content: [{ type: "text", text: "done" }] },
+      ),
+    };
+
+    const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => { events.push(e); });
+
+    const toolResultMsg = result.messages.find((m: any) => m.role === "toolResult") as any;
+    expect(toolResultMsg).toBeDefined();
+    expect(toolResultMsg.toolCallId).toBe("tc1");
+    expect(toolResultMsg.toolName).toBe("grep");
+    expect(toolResultMsg.timestamp).toBeDefined();
+    expect(toolResultMsg.isError).toBe(false);
   });
 });

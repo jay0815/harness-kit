@@ -120,10 +120,13 @@ export async function runAgentLoop(
     messages.push({ role: "assistant", content: finalResponse.content } as any);
     for (let i = 0; i < toolCalls.length; i++) {
       messages.push({
-        role: "tool",
+        role: "toolResult",
         toolCallId: toolCalls[i].id,
+        toolName: toolCalls[i].name,
         content: toolResults[i].content,
-        isError: toolResults[i].isError,
+        details: toolResults[i].details,
+        isError: toolResults[i].isError ?? false,
+        timestamp: Date.now(),
       } as any);
     }
     state.context.messages = messages;
@@ -235,19 +238,30 @@ async function executeToolCalls(
 }
 
 async function collectStream(stream: any): Promise<LLMResponse> {
-  const content: any[] = [];
-  let stopReason = "end_turn";
-  let usage: { inputTokens: number; outputTokens: number } | undefined;
+  let msg: any;
 
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      content.push(event.delta);
-    } else if (event.type === "message_stop") {
-      stopReason = event.stopReason ?? "end_turn";
-    } else if (event.type === "usage") {
-      usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
-    }
+  try {
+    msg = await stream.result();
+  } catch (err) {
+    throw new Error(`LLM stream failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  return { content, stopReason, usage };
+  if (msg.stopReason === "error" || msg.stopReason === "aborted") {
+    const detail = msg.errorMessage ? ` - ${msg.errorMessage}` : "";
+    throw new Error(`LLM response stopped: ${msg.stopReason}${detail}`);
+  }
+
+  const content = msg.content.map((c: any) =>
+    c.type === "toolCall"
+      ? { ...c, input: c.input ?? c.arguments }
+      : c,
+  );
+
+  return {
+    content,
+    stopReason: msg.stopReason,
+    usage: msg.usage
+      ? { inputTokens: msg.usage.input, outputTokens: msg.usage.output }
+      : undefined,
+  };
 }

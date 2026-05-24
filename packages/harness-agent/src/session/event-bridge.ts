@@ -18,7 +18,7 @@ export function bridgeContentBlocks(content: any[]): any[] {
         type: "tool_use",
         id: block.id,
         name: block.name,
-        input: block.input,
+        input: block.input ?? block.arguments,
       };
     }
     return block;

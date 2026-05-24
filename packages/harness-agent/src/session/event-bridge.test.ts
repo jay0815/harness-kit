@@ -39,6 +39,22 @@ describe("bridgeContentBlocks", () => {
     expect(bridgeContentBlocks(null as any)).toBeNull();
     expect(bridgeContentBlocks(undefined as any)).toBeUndefined();
   });
+
+  it("falls back to arguments when input is absent", () => {
+    const input = [
+      { type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/test" } },
+    ];
+    const result = bridgeContentBlocks(input);
+    expect(result[0].input).toEqual({ path: "/test" });
+  });
+
+  it("prefers input over arguments when both present", () => {
+    const input = [
+      { type: "toolCall", id: "tc1", name: "read_file", input: { path: "/a" }, arguments: { path: "/b" } },
+    ];
+    const result = bridgeContentBlocks(input);
+    expect(result[0].input).toEqual({ path: "/a" });
+  });
 });
 
 describe("bridgeAgentEvent", () => {

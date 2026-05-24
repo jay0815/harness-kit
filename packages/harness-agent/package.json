@@ -4,6 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "harness-agent": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,6 +22,14 @@
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
     "@sinclair/typebox": "^0.34.0"
+  },
+  "peerDependencies": {
+    "@harness-kit/core": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@harness-kit/core": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

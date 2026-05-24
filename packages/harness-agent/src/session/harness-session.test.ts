@@ -21,19 +21,28 @@ function makeConfig(overrides?: Partial<HarnessAgentSessionConfig>): HarnessAgen
     cwd: "/test",
     model: {} as any,
     systemPrompt: "You are a helpful assistant.",
-    streamFn: vi.fn() as any,
+    streamFn: vi.fn().mockImplementation(async () => ({
+      result: async () => ({
+        content: [{ type: "text", text: "default" }],
+        stopReason: "end_turn",
+        usage: { input: 100, output: 50 },
+      }),
+    })) as any,
     ...overrides,
   };
 }
 
 function mockStreamFn(responseText: string, toolCalls: any[] = []) {
-  return vi.fn().mockImplementation(async function* () {
-    yield { type: "content_block_delta", delta: { type: "text", text: responseText } };
-    for (const tc of toolCalls) {
-      yield { type: "content_block_delta", delta: { type: "toolCall", ...tc } };
-    }
-    yield { type: "message_stop" };
-  });
+  return vi.fn().mockImplementation(async () => ({
+    result: async () => ({
+      content: [
+        { type: "text", text: responseText },
+        ...toolCalls.map((tc) => ({ type: "toolCall", ...tc })),
+      ],
+      stopReason: "end_turn",
+      usage: { input: 100, output: 50 },
+    }),
+  }));
 }
 
 describe("HarnessAgentSession", () => {
@@ -66,10 +75,15 @@ describe("HarnessAgentSession", () => {
 
   it("registerTool makes tool available during prompt", async () => {
     let receivedTools: any[] | undefined;
-    const streamFn = vi.fn().mockImplementation(async function* (model: any, ctx: any) {
+    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
       receivedTools = ctx.tools;
-      yield { type: "content_block_delta", delta: { type: "text", text: "done" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "done" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -90,10 +104,15 @@ describe("HarnessAgentSession", () => {
 
   it("before_agent_start handler modifies systemPrompt", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async function* (model: any, ctx: any) {
+    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
       capturedPrompt = ctx.systemPrompt;
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -109,10 +128,15 @@ describe("HarnessAgentSession", () => {
 
   it("chains multiple before_agent_start handlers", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async function* (model: any, ctx: any) {
+    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
       capturedPrompt = ctx.systemPrompt;
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -131,10 +155,15 @@ describe("HarnessAgentSession", () => {
 
   it("supports async before_agent_start handlers", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async function* (model: any, ctx: any) {
+    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
       capturedPrompt = ctx.systemPrompt;
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -183,11 +212,16 @@ describe("HarnessAgentSession", () => {
       "corrected response <HK_RESULT>OK</HK_RESULT>",
     ];
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       const text = responses[promptCount] ?? responses[responses.length - 1];
       promptCount++;
-      yield { type: "content_block_delta", delta: { type: "text", text } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -207,10 +241,15 @@ describe("HarnessAgentSession", () => {
 
   it("respects maxAutoRetries limit", async () => {
     let promptCount = 0;
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       promptCount++;
-      yield { type: "content_block_delta", delta: { type: "text", text: "response" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "response" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn, maxAutoRetries: 2 }));
@@ -278,10 +317,15 @@ describe("HarnessAgentSession", () => {
     let resolveFirst: () => void;
     const firstBlocker = new Promise<void>((r) => { resolveFirst = r; });
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       await firstBlocker;
-      yield { type: "content_block_delta", delta: { type: "text", text: "done" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "done" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -317,9 +361,14 @@ describe("HarnessAgentSession", () => {
     const turnEndEvents: any[] = [];
     let callCount = 0;
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
-      yield { type: "content_block_delta", delta: { type: "text", text: "response" } };
-      yield { type: "message_stop" };
+    const streamFn = vi.fn().mockImplementation(async () => {
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "response" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -342,9 +391,14 @@ describe("HarnessAgentSession", () => {
     const sessionDir = join(tmpDir, "persist-dedup");
     let callCount = 0;
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
-      yield { type: "content_block_delta", delta: { type: "text", text: "response" } };
-      yield { type: "message_stop" };
+    const streamFn = vi.fn().mockImplementation(async () => {
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "response" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(
@@ -400,10 +454,15 @@ describe("HarnessAgentSession", () => {
 
   it("async turn_end handler with await before sendUserMessage triggers retry", async () => {
     let promptCount = 0;
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       promptCount++;
-      yield { type: "content_block_delta", delta: { type: "text", text: "response" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "response" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -423,10 +482,13 @@ describe("HarnessAgentSession", () => {
   });
 
   it("async handler reject: state cleaned up, subsequent prompt works", async () => {
-    const streamFn = vi.fn().mockImplementation(async function* () {
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
-    });
+    const streamFn = vi.fn().mockImplementation(async () => ({
+      result: async () => ({
+        content: [{ type: "text", text: "ok" }],
+        stopReason: "end_turn",
+        usage: { input: 100, output: 50 },
+      }),
+    }));
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
     let shouldFail = true;
@@ -451,10 +513,15 @@ describe("HarnessAgentSession", () => {
     let resolveStream: () => void;
     const streamBlocker = new Promise<void>((r) => { resolveStream = r; });
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       await streamBlocker;
-      yield { type: "content_block_delta", delta: { type: "text", text: "late" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "late" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -482,12 +549,17 @@ describe("HarnessAgentSession", () => {
     let resolveStarted!: () => void;
     const started = new Promise<void>((r) => { resolveStarted = r; });
 
-    const streamFn = vi.fn().mockImplementation(async function* (_model: any, _ctx: any, opts: any) {
+    const streamFn = vi.fn().mockImplementation(async (_model: any, _ctx: any, opts: any) => {
       capturedSignal = opts.signal;
       resolveStarted();
       await streamBlocker;
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
@@ -514,13 +586,18 @@ describe("HarnessAgentSession", () => {
     const streamBlocker = new Promise<void>((r) => { resolveStream = r; });
     let callCount = 0;
 
-    const streamFn = vi.fn().mockImplementation(async function* () {
+    const streamFn = vi.fn().mockImplementation(async () => {
       callCount++;
       if (callCount === 1) {
         await streamBlocker;
       }
-      yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
-      yield { type: "message_stop" };
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
