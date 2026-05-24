@@ -52,3 +52,18 @@
 - Identified borrowable patterns: artifact-driven state, guardrails snapshot, convergence detection
 - Noted key difference: take-root uses subprocess runtime, harness-kit uses tmux IPC
 - Updated design-decisions.md with reference comparison table
+
+## [2026-05-24] feat | 降级方案：PI-as-agent 模式
+
+- 重写 system prompt：orchestrator → coding agent
+- workflow.ts executor 改为 "self"
+- 真实环境验证：PI + kimi-coder 完成 design/implement/test 三阶段
+- humanConfirm 机制验证通过
+- telemetry 记录 4 次 hard_verify 调用（含 2 次自我纠错）
+
+## [2026-05-24] feat | turn_end 自动验证
+
+- 添加 turn_end handler：LLM 输出后自动拦截 HK_RESULT
+- verifyFacts 验证失败时 pi.sendUserMessage 注入错误信息
+- 不依赖 LLM 主动调用 hard_verify，对所有 LLM 有效
+- telemetry 新增 auto_verify 事件类型

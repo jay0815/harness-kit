@@ -58,3 +58,19 @@ export interface PaneInfo {
   label: string;
   executor: string;
 }
+
+export interface PhaseState {
+  name: string;
+  status: "pending" | "completed";
+  artifactPath?: string;
+  completedAt?: string;
+}
+
+export interface HarnessState {
+  schemaVersion: 1;
+  workspaceDir: string;
+  createdAt: string;
+  updatedAt: string;
+  currentPhase: number;
+  phases: PhaseState[];
+}

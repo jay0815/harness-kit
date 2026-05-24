@@ -16,29 +16,37 @@
 
 **Trade-off**: An agent can cite real text and still draw wrong conclusions. We accept this.
 
-## 3. Fail-stop, no auto-retry
+## 3. Auto-correct on failure (was: fail-stop)
 
-**Decision**: If hard_verify FAILs, the workflow stops. No automatic retry.
+**Decision**: If hard_verify FAILs, the harness injects error details into the conversation via `pi.sendUserMessage()`, giving the LLM a chance to self-correct. If the LLM still doesn't correct after injection, the workflow stops.
 
-**Why**: Auto-retry can mask systematic problems. A human should see the failure and decide what to do.
+**Why**: Pure fail-stop requires human intervention for every error. Auto-correct handles the common case (LLM got a line number wrong) while still escalating to humans for persistent failures.
 
-**Trade-off**: More human intervention required. Acceptable for MVP.
+**Trade-off**: An LLM could get stuck in a correction loop. Telemetry tracks all verify attempts to detect this.
 
-## 4. Single executor + single validator
+## 4. PI self-execution (degraded mode)
 
-**Decision**: One executor agent per phase, one optional validator. No multi-agent chat.
+**Decision**: In degraded mode, PI itself executes all phases. The tmux pane tools (start_agent, acp_send, acp_read) are retained for full mode but unused.
 
-**Why**: Multi-agent chat is complex and unproven for this use case. Start simple.
+**Why**: Eliminates tmux IPC complexity. PI + kimi-coder can handle most tasks. Multi-agent orchestration via tmux is reserved for complex tasks that need different LLMs per phase.
 
-**Trade-off**: No real-time agent-to-agent collaboration. The validator is asynchronous.
+**Trade-off**: Single LLM for all phases. No specialization (e.g., one agent for design, another for implementation).
 
-## 5. tmux as the IPC layer
+## 5. tmux IPC (optional, full mode only)
 
-**Decision**: Use tmux panes + tmux-bridge for agent communication.
+**Decision**: tmux-bridge is the IPC layer for full mode (driving external agents). Not required in degraded mode.
 
-**Why**: Every coding agent runs in a terminal. tmux is the universal terminal multiplexer. It works with any agent that can run in a shell.
+**Why**: Every coding agent runs in a terminal. tmux is the universal terminal multiplexer. But in degraded mode, PI is the agent, so no IPC is needed.
 
-**Trade-off**: Requires tmux installation. Read guard adds complexity.
+**Trade-off**: Full mode requires tmux installation. Read guard adds complexity.
+
+## 6. Auto-verify by default
+
+**Decision**: The `turn_end` handler automatically intercepts LLM output, extracts `<HK_RESULT>` blocks, and verifies facts against disk. The LLM does not need to call `hard_verify` — the harness does it.
+
+**Why**: Different LLMs have different instruction compliance levels. A smart LLM might call `hard_verify` voluntarily; a less capable one might skip it. The harness should be defensive — verify by default, not by request.
+
+**Trade-off**: Extra `verifyFacts` call on every turn that produces a `<HK_RESULT>`. Negligible cost (file reads + string comparison) compared to the safety benefit.
 
 ---
 
@@ -52,7 +60,7 @@ take-root (`github-repo/take-root`) shares the same structural direction: CLI �
 |---------|------------------------|-----------------|----------|
 | Artifact-driven state | `.take_root/state.json` + `reconcile_state_from_disk()` reconstructs state from disk artifacts, not memory | No state persistence; PI session中断则丢失所有进度 | P0 |
 | Guardrails snapshot | `snapshot_workspace()` 做 SHA256 快照, `out_of_scope_changes()` 检测越权写入 | hard_verify 只验证声明的事实，不检测未声明的写入 | P1 |
-| Convergence detection | round loop + frontmatter `status: "converged"` 检测 | 单轮执行，无多轮迭代 | P2 |
+| Convergence detection | round loop + frontmatter `status: "converged"` 检测 | 单轮执行，无多轮迭代（类似 CC/Codex goals 模式） | P2 |
 | Error hierarchy | 7 种异常类型映射不同 exit code | 错误处理分散在 tool return content 里 | P3 |
 | Boot message contract | `format_boot_message()` 结构化上下文 + size guard (warn 8K, abort 32K) | system prompt append 式注入，无 size guard | P3 |
 
@@ -69,3 +77,5 @@ take-root (`github-repo/take-root`) shares the same structural direction: CLI �
 take-root 的 state reconciliation 是核心韧性机制：`reconcile_state_from_disk()` 从 artifact 文件重建整个 workflow 状态。`state.json` 丢了没关系，只要 artifact 在就能恢复。malformed artifact 直接删除，防止脏状态传播。
 
 harness-kit 应该借鉴这个思路：把 `<HK_RESULT>` 解析产物持久化到 `.harness-kit/` 目录，session 恢复时从磁盘重建进度。
+
+auto-verify（turn_end 自动拦截验证）部分实现了 take-root 的韧性理念：不依赖 LLM 自觉，harness 层自动纠错。但状态持久化（P0）仍是下一步最高优先级。
