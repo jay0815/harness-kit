@@ -76,3 +76,14 @@
 - 集成到 index.ts：phase 完成时自动检测越权变更
 - telemetry 新增 guardrail:out_of_scope 事件类型
 - 8 个单元测试全部通过
+
+## [2026-05-24] feat | 自定义 workflow 执行框架
+
+- 支持 YAML 格式定义 workflow，TypeBox schema 验证
+- 两种 executor 类型：llm（LLM 执行）+ code（代码执行）
+- code executor 支持 shell command 和外部脚本（.ts/.js）
+- 模板替换：{{phaseName.output}} 引用前序 phase 输出
+- Fail-stop 模式：首个 phase 失败即停止
+- Dry-run 模式：executeWorkflow({ dryRun: true }) 只验证不执行
+- 新增 4 个模块：workflow-schema, workflow-loader, code-executor, workflow-executor
+- 40 个新测试，总计 75 个测试全部通过

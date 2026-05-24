@@ -71,6 +71,54 @@ Phase end   → snapshotWorkspace() → after snapshot
 
 **Behavior**: Informational only — does not block phase completion. Logs undeclared changes for review.
 
+## Custom Workflow Execution
+
+harness-kit supports user-defined workflows via YAML configuration:
+
+```yaml
+workflow: code-review
+description: "代码审查流程"
+phases:
+  - name: analyze
+    executor: llm
+    prompt: "分析代码架构"
+    
+  - name: lint
+    executor: code
+    command: "pnpm run lint"
+    
+  - name: custom-check
+    executor: code
+    script: "./scripts/check.ts"
+    args: ["--strict"]
+    
+  - name: review
+    executor: llm
+    prompt: |
+      基于以下结果：
+      - lint: {{lint.output}}
+      - check: {{custom-check.output}}
+```
+
+**Executor Types:**
+
+| Type | Description | Output |
+|------|-------------|--------|
+| `llm` | LLM 执行，输出 `<HK_RESULT>` | LLM 文本输出 |
+| `code` | 代码执行，确定性结果 | stdout/stderr |
+
+**Code Execution Modes:**
+
+- `command`: Shell command（支持 pipes、redirects）
+- `script`: 外部脚本（.ts/.js），必须 `export default async function`
+
+**Key Features:**
+
+- **Fail-stop**: 第一个 phase 失败即停止
+- **Template substitution**: `{{phaseName.output}}` 引用前面 phase 的输出
+- **Dry-run**: `executeWorkflow({ dryRun: true })` 只验证结构不执行
+- **Inter-phase data flow**: 前序 phase 输出自动注入后续 phase context
+
 ## Data Flow (Degraded Mode)
 
 ```
@@ -92,7 +140,11 @@ User → PI Agent → [system prompt injection] → LLM
 | Result parser | `src/result-block.ts` | Extract JSON from `<HK_RESULT>` blocks |
 | Verifier | `src/verify.ts` | Read file, slice lines, compare text |
 | Guardrails | `src/guardrails.ts` | Workspace snapshot and out-of-scope file detection |
-| Workflow | `src/workflow.ts` | Hardcoded 3-phase workflow (design → implement → test) |
+| Workflow (legacy) | `src/workflow.ts` | Hardcoded 3-phase workflow (design → implement → test) |
+| Workflow schema | `src/workflow-schema.ts` | TypeBox schemas for custom workflows |
+| Workflow loader | `src/workflow-loader.ts` | YAML loading, validation, template substitution |
+| Code executor | `src/code-executor.ts` | Shell command and script execution |
+| Workflow executor | `src/workflow-executor.ts` | Phase orchestration, fail-stop, dry-run |
 | Telemetry | `src/telemetry.ts` | JSONL event recording |
 | CLI | `src/cli.ts` | Standalone harness-verify |
 

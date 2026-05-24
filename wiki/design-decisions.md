@@ -56,6 +56,14 @@
 
 **Trade-off**: Extra `snapshotWorkspace()` call on phase completion. Traverses the workspace directory tree, but skips `.git/`, `.harness-kit/`, `node_modules/`. Informational only — does not block phase completion.
 
+## 8. Custom workflow with dual executor types
+
+**Decision**: Support user-defined workflows via YAML configuration with two executor types: `llm` and `code`. Code executor supports both shell commands and external scripts. Inter-phase data flow via `{{phaseName.output}}` template substitution.
+
+**Why**: Hardcoded 3-phase workflow (design → implement → test) is too rigid. Users need to define custom workflows with deterministic steps (lint, test, build) alongside LLM phases. Code execution provides hard guarantees that LLM cannot.
+
+**Trade-off**: Added complexity in workflow loader and executor. YAML schema validation via TypeBox prevents malformed workflows. Dry-run mode enables testing without execution.
+
 ---
 
 ## Reference: take-root architecture patterns
