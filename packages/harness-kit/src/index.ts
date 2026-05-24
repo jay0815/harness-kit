@@ -1,7 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
 import { createDefaultWorkflow } from "./workflow.js";
-import { initTelemetry, close as closeTelemetry } from "./telemetry.js";
+import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
+import { extractResultBlock } from "./result-block.js";
+import { verifyFacts } from "./verify.js";
 
 /**
  * Harness-kit PI Extension entry point.
@@ -14,8 +16,10 @@ import { initTelemetry, close as closeTelemetry } from "./telemetry.js";
 export default function harnessKitExtension(pi: ExtensionAPI) {
   const workflow = createDefaultWorkflow();
   const harnessPrompt = buildHarnessPrompt(workflow);
+  let workspaceDir = process.cwd();
 
   pi.on("session_start", (_event, ctx) => {
+    workspaceDir = ctx.cwd;
     setWorkspaceDir(ctx.cwd);
     initTelemetry();
   });
@@ -28,6 +32,43 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
   for (const tool of harnessKitTools) {
     pi.registerTool(tool);
   }
+
+  // Auto-verify: intercept LLM output, verify facts, inject failure feedback
+  pi.on("turn_end", (event) => {
+    const msg = event.message as { content?: unknown[] };
+    if (!Array.isArray(msg.content)) return;
+
+    const text = msg.content
+      .filter((c): c is { type: "text"; text: string } =>
+        typeof c === "object" && c !== null && (c as { type: string }).type === "text"
+      )
+      .map((c) => c.text)
+      .join("");
+
+    const block = extractResultBlock(text);
+    if (!block || block.facts.length === 0) return;
+
+    const report = verifyFacts(block.facts, workspaceDir);
+    emit("auto_verify", report.overall.toLowerCase(), {
+      factCount: block.facts.length,
+      passCount: report.checks.filter((c) => c.status === "PASS").length,
+      failCount: report.checks.filter((c) => c.status === "FAIL").length,
+    });
+
+    if (report.overall === "FAIL") {
+      const failures = report.checks
+        .filter((c) => c.status === "FAIL")
+        .map((c) => {
+          const reason = c.error ?? `text mismatch (expected: ${c.fact.exactText.slice(0, 60)}...)`;
+          return `  ✗ ${c.fact.file}:${c.fact.startLine}-${c.fact.endLine} — ${reason}`;
+        })
+        .join("\n");
+
+      pi.sendUserMessage(
+        `[harness-kit auto-verify] FAIL:\n${failures}\nFix the incorrect facts and output a corrected <HK_RESULT> block.`,
+      );
+    }
+  });
 
   // Inject harness-kit workflow instructions into system prompt
   pi.on("before_agent_start", (event) => {
