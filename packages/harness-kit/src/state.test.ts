@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { initState, saveState, loadState, saveArtifact, reconcileFromDisk } from "./state.js";
+import { initState, loadState, saveArtifact, reconcileFromDisk } from "./state.js";
 import type { ResultBlock, Workflow } from "./types.js";
 
 const testWorkflow: Workflow = {

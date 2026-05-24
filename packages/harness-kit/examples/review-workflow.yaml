@@ -1,0 +1,58 @@
+workflow: code-review
+description: 对 harness-kit 代码库进行质量检查和 review
+
+phases:
+  # Phase 1: 运行 lint 检查
+  - name: lint
+    executor: code
+    command: "pnpm run lint"
+
+  # Phase 2: 运行类型检查
+  - name: typecheck
+    executor: code
+    command: "pnpm run typecheck"
+
+  # Phase 3: 运行测试
+  - name: test
+    executor: code
+    command: "pnpm run test"
+
+  # Phase 4: 统计代码行数
+  - name: stats
+    executor: code
+    command: |
+      echo "=== 源文件统计 ==="
+      find harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "源文件数量:"
+      find harness-kit/src -name "*.ts" ! -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "源代码行数:"
+      echo ""
+      echo "=== 测试文件统计 ==="
+      find harness-kit/src -name "*.test.ts" 2>/dev/null | wc -l | xargs echo "测试文件数量:"
+      find harness-kit/src -name "*.test.ts" -exec cat {} + 2>/dev/null | wc -l | xargs echo "测试代码行数:"
+      echo ""
+      echo "=== 模块列表 ==="
+      find harness-kit/src -name "*.ts" ! -name "*.test.ts" 2>/dev/null | sort
+
+  # Phase 5: LLM 综合 review
+  - name: review
+    executor: llm
+    prompt: |
+      ## 代码质量检查结果
+
+      ### Lint 检查
+      {{lint.output}}
+
+      ### 类型检查
+      {{typecheck.output}}
+
+      ### 测试结果
+      {{test.output}}
+
+      ### 代码统计
+      {{stats.output}}
+
+      ---
+
+      请基于以上结果，给出代码 review 意见：
+      1. 代码质量评估（lint、类型安全、测试覆盖）
+      2. 发现的问题（按优先级排序）
+      3. 改进建议
