@@ -20,8 +20,7 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
     initTelemetry();
   });
 
-  // Flush telemetry on process exit (PI has no session_end event)
-  process.on("beforeExit", () => {
+  pi.on("session_shutdown", () => {
     closeTelemetry();
   });
 
