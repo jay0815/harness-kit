@@ -1,9 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { AgentA, createAgentA } from "./agent-a.js";
-import type { Model } from "./types.js";
+import type { Model, StreamFn } from "./types.js";
 
 function makeModel(): Model<any> {
   return { provider: "test", id: "test-model" } as any;
+}
+
+function makeStreamFn(): StreamFn {
+  return vi.fn().mockImplementation(async function* () {
+    yield { type: "content_block_delta", delta: { type: "text", text: "ok" } };
+    yield { type: "message_stop" };
+  }) as any;
 }
 
 describe("AgentA", () => {
@@ -12,6 +19,7 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn: makeStreamFn(),
     });
     expect(agent).toBeInstanceOf(AgentA);
   });
@@ -21,6 +29,7 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn: makeStreamFn(),
     });
     const state = agent.getState();
     expect(state.taskResults).toEqual([]);
@@ -32,6 +41,7 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn: makeStreamFn(),
     });
 
     const emit = vi.fn();
@@ -48,6 +58,7 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn: makeStreamFn(),
     });
 
     const emit = vi.fn();
@@ -65,30 +76,44 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn: makeStreamFn(),
       maxIterations: 1,
     });
 
     const emit = vi.fn();
-    // This will fail because streamFn is not injected, but we can check the assessment
-    const result = await agent.processHumanMessage("Implement a new feature for user auth", emit);
+    await agent.processHumanMessage("Implement a new feature for user auth", emit);
 
     expect(emit).toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_a_assessment" }),
     );
   });
 
-  it("saves task results after completion", async () => {
+  it("delegates to Agent B with injected streamFn", async () => {
+    const streamFn = makeStreamFn();
     const agent = createAgentA({
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
+      streamFn,
       maxIterations: 1,
     });
 
     const emit = vi.fn();
-    await agent.processHumanMessage("Fix the login bug", emit);
+    const result = await agent.processHumanMessage("Implement a new feature for user auth", emit);
+
+    expect(streamFn).toHaveBeenCalledTimes(1);
+    expect(result).toContain("ok");
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_b_start" }),
+    );
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_b_complete" }),
+    );
 
     const state = agent.getState();
-    expect(state.taskResults.length).toBeGreaterThanOrEqual(0);
+    expect(state.taskResults).toHaveLength(1);
+    expect(state.taskResults[0].status).toBe("completed");
+    expect(state.taskResults[0].output).toContain("ok");
   });
 });

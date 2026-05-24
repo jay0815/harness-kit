@@ -4,6 +4,7 @@ import type {
   AgentTool,
   IterationBudget,
   Model,
+  StreamFn,
   TaskStatus,
   TaskSummary,
   TokenUsage,
@@ -16,6 +17,7 @@ export interface AgentBConfig {
   model: Model<any>;
   workspaceDir: string;
   tools: AgentTool<any>[];
+  streamFn: StreamFn;
   maxIterations?: number;
   tokenThreshold?: number; // default 0.9
 }
@@ -80,9 +82,7 @@ export class AgentB {
           messages: initialMessages,
           tools: this.config.tools,
           contextWindow: 200_000,
-          streamFn: async () => {
-            throw new Error("streamFn not injected by session layer");
-          },
+          streamFn: this.config.streamFn,
           convertToLlm: (msgs) => msgs as any,
         },
         this.budget,

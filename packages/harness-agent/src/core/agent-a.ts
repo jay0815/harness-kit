@@ -6,6 +6,7 @@ import type {
   AgentTool,
   LLMResponse,
   Model,
+  StreamFn,
   TaskResult,
   TaskSummary,
 } from "./types.js";
@@ -15,6 +16,7 @@ export interface AgentAConfig {
   model: Model<any>;
   workspaceDir: string;
   tools: AgentTool<any>[];
+  streamFn: StreamFn;
   maxIterations?: number;
   tokenThreshold?: number; // default 0.9
 }
@@ -68,6 +70,7 @@ export class AgentA {
       model: this.config.model,
       workspaceDir: this.config.workspaceDir,
       tools: this.config.tools,
+      streamFn: this.config.streamFn,
       maxIterations: this.config.maxIterations,
       tokenThreshold: this.config.tokenThreshold,
     };
