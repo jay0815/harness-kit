@@ -38,3 +38,17 @@
 - Added oxlint, TypeScript 6.0
 - Created CLAUDE.md (LLM wiki schema)
 - All 17 tests passing
+
+## [2026-05-24] docs | LLM Wiki architecture
+
+- Karpathy's LLM Wiki pattern: raw sources (docs/) → wiki pages (wiki/) → schema (CLAUDE.md)
+- 8 wiki pages: index, architecture, tech-stack, acp-protocol, pi-integration, design-decisions, conventions, log
+- CLAUDE.md rewritten as lean schema (95→40 lines)
+- Added principles: Linus's three questions, fact-based thinking, no sycophancy
+
+## [2026-05-24] design | take-root architecture analysis
+
+- Read take-root codebase: cli → phases → runtimes → agents
+- Identified borrowable patterns: artifact-driven state, guardrails snapshot, convergence detection
+- Noted key difference: take-root uses subprocess runtime, harness-kit uses tmux IPC
+- Updated design-decisions.md with reference comparison table
