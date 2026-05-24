@@ -76,6 +76,225 @@ packages/harness-agent/
 └── tests/
 ```
 
+## Agent A 评估机制重设计
+
+### 现状问题
+
+`agent-a.ts` 的 `assessInput()` 用关键词匹配做任务分类：
+
+```typescript
+const isQuestion = lower.includes("?") || lower.startsWith("what") || ...
+const isTask = lower.includes("implement") || lower.includes("fix") || ...
+const isVague = input.length < 20 || lower === "help" || ...
+```
+
+问题：
+- **"implement" 在问题句里也会出现** — "How does X implement Y?" 会被误判为任务
+- **"fix" 在讨论中也会出现** — "The fix for this is..." 不是要执行修复
+- **复杂度用词数估算** — 50 词 = high，20 词 = medium，毫无语义依据
+- **风险用关键词估算** — "delete" = high，但 "delete a comment" 风险很低
+
+### 核心思考：为什么需要独立评估 agent
+
+单 agent + 好的 system prompt + 工具，天然能做任务评估和执行。但评估质量会被主 agent 的上下文污染。
+
+**独立评估 agent 的价值不在于"能不能做"，而在于"做得好不好"：**
+
+1. **上下文隔离** — 主 agent 的对话历史（包括之前的工具调用、错误、修正）会影响判断。独立 agent 看到的是干净的原始输入，不会被"我已经试过 X 了"这种上下文干扰
+2. **客观性** — 主 agent 可能因为已经投入了多轮交互而倾向于继续（沉没成本）。独立 agent 没有这种偏见
+3. **可替换** — 评估逻辑可以独立迭代（换模型、换 prompt、加工具），不影响执行 agent
+4. **自主性** — 评估 agent 可以有自己的 system prompt（强调风险评估、任务分解），甚至可以用不同的模型（更便宜、更快的模型做初筛）
+
+### 设计方案
+
+**评估 agent 是一个独立的 LLM 调用，不是关键词匹配。**
+
+```
+用户输入
+  │
+  ▼
+评估 agent（独立 LLM 调用，干净上下文）
+  ├── system prompt: 强调风险评估、任务分解、复杂度判断
+  ├── input: 用户原始消息（无历史上下文）
+  ├── tools: read_file（可以读代码辅助判断）、list_files（了解项目结构）
+  └── output: 结构化评估 JSON
+       ├── understood: boolean
+       ├── taskOverview: string（整理后的清晰任务描述）
+       ├── complexity: "low" | "medium" | "high"（附理由）
+       ├── risk: "low" | "medium" | "high"（附理由）
+       ├── needsAgentB: boolean
+       ├── clarificationNeeded?: string
+       └── reasoning: string（评估推理过程）
+  │
+  ▼
+主 agent（执行者，有完整上下文）
+  ├── 收到评估结果 + 整理后的任务描述
+  └── 执行任务
+```
+
+### 评估 agent 的 system prompt 设计
+
+```
+你是一个任务评估 agent。你的唯一职责是理解用户输入，做出结构化评估。
+
+规则：
+1. 判断用户是想"问问题"还是"执行任务"
+2. 如果是任务，评估复杂度和风险
+3. 如果输入模糊，指出需要澄清的具体点
+4. 输出严格的 JSON，不要输出其他内容
+
+复杂度评估标准：
+- low: 单文件修改、简单查询、格式调整
+- medium: 多文件修改、需要理解上下文、涉及测试
+- high: 架构变更、跨模块重构、涉及安全/数据
+
+风险评估标准：
+- low: 只读操作、添加新代码、文档修改
+- medium: 修改现有代码、重构、依赖变更
+- high: 删除代码、数据库变更、安全相关、生产环境操作
+
+你可以使用 read_file 和 list_files 工具来辅助判断（例如查看项目结构、了解代码规模）。
+```
+
+### 为什么评估 agent 需要工具
+
+纯 LLM 判断复杂度和风险还是不够准确。给评估 agent 读文件的能力，它可以：
+- 看到要修改的文件有多大、有多少依赖
+- 判断"refactor auth module"是改 1 个文件还是 20 个文件
+- 判断"delete the old handler"删除的是 10 行还是 1000 行
+
+这比关键词匹配准确得多。
+
+### 与主 agent 的交互
+
+评估 agent 的输出是结构化 JSON，主 agent 收到后：
+- `understood: false` → 向用户澄清
+- `needsAgentB: false` → 直接回答（简单问题）
+- `needsAgentB: true` → 用 `taskOverview` 作为任务描述，委托执行
+
+主 agent 不需要重新理解用户意图，评估 agent 已经整理好了。
+
+### 实施步骤
+
+1. 重写 `assessInput()` — 改为 LLM 调用，用结构化 prompt + JSON 输出
+2. 评估 agent 的 system prompt — 强调风险评估、任务分解
+3. 给评估 agent 注入工具 — read_file、list_files（只读）
+4. 更新测试 — 用 registerFauxProvider 测试评估逻辑
+5. 移除关键词匹配代码
+
+### 收益
+
+| 维度 | 关键词匹配 | LLM 评估 |
+|------|-----------|----------|
+| 准确率 | 低（误判多） | 高（理解语义） |
+| 复杂度判断 | 词数估算 | 代码规模 + 依赖分析 |
+| 风险判断 | 关键词匹配 | 语义理解 + 文件检查 |
+| 可维护性 | 硬编码规则 | prompt 迭代 |
+| 可扩展性 | 加规则 | 加工具 |
+
+---
+
+## Subagent 调度设计
+
+### 现状
+
+"claude -p 作为 subagent" 是确定的方向，但只有方向没有具体设计。harness-kit 的核心价值之一是"给足上下文、限定范围、让 subagent 只执行一件事"，这需要一套完整的调度协议。
+
+### 待回答的问题
+
+**上下文注入**：
+- system prompt 怎么构造才能让 Claude Code 只做一件事？需要包含：任务描述、约束条件、输出格式要求（`<HK_RESULT>`）、禁止的操作范围
+- 项目上下文怎么给？直接塞进 system prompt 会太大，是否需要先让 harness 读取相关文件再注入？
+- harness 的 workflow 状态（当前 phase、已完成的 phases）怎么传递？
+
+**输出协议**：
+- subagent 必须输出 `<HK_RESULT>` 块，但 Claude Code 没有原生支持这个格式
+- 方案 A：在 system prompt 中要求输出 `<HK_RESULT>`，依赖 Claude Code 的指令遵循能力
+- 方案 B：harness 后处理 Claude Code 的输出，尝试提取事实声明
+- 方案 C：注册一个自定义 MCP tool 让 Claude Code 主动调用（如 `report_result`）
+- 需要验证哪种方案最可靠
+
+**失败处理**：
+- subagent 超时（默认多久？可配置？）
+- 输出不含 `<HK_RESULT>`（重试？降级？报错？）
+- 结果有误（事实校验失败 → 反馈给 subagent 重试？还是回退给主 agent？）
+- subagent 进入死循环（iteration budget 由谁控制？harness 还是 subagent 自己？）
+
+**多 subagent 协调**：
+- 多个 subagent 之间的结果冲突怎么解决？
+- 是否需要 Agent A 做结果合并/冲突检测？
+- 并行执行 vs 串行执行的选择依据？
+
+### 设计方案（待细化）
+
+```
+主 agent (harness)
+  │
+  ├─ 构建 subagent context
+  │    ├── 任务描述（来自评估 agent 的 taskOverview）
+  │    ├── 约束条件（文件范围、禁止操作）
+  │    ├── 输出格式要求（<HK_RESULT> 模板）
+  │    └── 相关文件内容（harness 预读取）
+  │
+  ├─ 启动 subagent
+  │    ├── claude -p --system-prompt "{constructed_prompt}" "{task}"
+  │    ├── 或 codex "{task}" --full-auto
+  │    └── timeout + iteration budget
+  │
+  ├─ 收集输出
+  │    ├── 提取 <HK_RESULT> 块
+  │    ├── 事实校验（FactVerificationMiddleware）
+  │    └── 失败 → 反馈 + 重试（最多 N 次）
+  │
+  └─ 结果处理
+       ├── PASS → 继续下一个 phase
+       └── FAIL after retries → 报告给用户
+```
+
+### 实施步骤
+
+1. 定义 subagent 调度协议（system prompt 模板、输出格式、超时配置）
+2. 实现 SubagentRunner — 封装 `claude -p` / `codex` CLI 调用
+3. 实现输出解析 — 从 subagent 输出中提取 `<HK_RESULT>`
+4. 实现失败重试 — 超时、格式错误、事实校验失败的重试策略
+5. 集成到 Agent A — 作为 Agent B 的替代执行方式
+6. 测试 — 用 mock subagent 测试调度协议
+
+---
+
+## pi-ai 解耦（优先级最低）
+
+### 现状
+
+agent runtime 深度依赖 `@mariozechner/pi-ai`：
+- `StreamFn` 类型签名直接继承自 `streamSimple`
+- `AssistantMessage` 结构（`ToolCall.arguments` vs `input`）渗透到 agent-loop、event-bridge、所有测试 mock
+- `Model`、`Message`、`Tool`、`ToolResultMessage` 等核心类型全部来自 pi-ai
+- CLI config 使用 `getModel`、`getModels`、`getProviders`、`getEnvApiKey`、`streamSimple`
+
+### 问题
+
+如果以后要支持不走 pi-ai 的 provider（比如直接调 Anthropic SDK、OpenAI SDK），改动面会很大。当前的抽象层不够：
+- `StreamFn` 是 pi-ai 的 `streamSimple` 的直接映射，不是通用抽象
+- 消息格式（`role: "toolResult"`、`toolCallId`、`toolName`）是 pi-ai 的约定
+- 测试 mock 都基于 pi-ai 的 `registerFauxProvider`
+
+### 为什么优先级最低
+
+- pi-ai 目前工作正常，支持 anthropic、openai、deepseek 等主流 provider
+- 直接调 SDK 的收益不明确（pi-ai 已经封装了多 provider）
+- 解耦成本高：需要定义通用消息格式、抽象 stream 协议、重写所有测试
+- 当前阶段（事实校验、subagent 调度、评估 agent）更有价值
+
+### 未来解耦路径（仅记录，不实施）
+
+1. 定义 harness-kit 自有的消息格式（`HarnessMessage`、`HarnessToolCall`、`HarnessToolResult`）
+2. 定义通用 stream 协议（`StreamAdapter` 接口，pi-ai 作为第一个实现）
+3. 在 agent-loop 和 middleware 之间加转换层
+4. 逐步替换测试 mock
+
+---
+
 ## 实施步骤
 
 ### Phase 1: 双 Agent Loop + Middleware（优先级最高）
@@ -427,7 +646,45 @@ wiki 格式化后可以跨 session 复用：
 - 新 session 启动时注入 relevant knowledge
 - 参考 prax-agent 的 `MemoryBackend` 置信度评分机制
 
-### Phase 4: Error Recovery + Planning（借鉴 prax-agent）
+### Phase 4: 事实校验迁移（verify → agent）
+
+**目标**: 将事实校验从 `@harness-kit/core` 移入 `@harness-kit/agent` 作为固定能力。通过牺牲速度换取准确性。
+
+**动机**: verify.ts、result-block.ts 是纯函数，零外部依赖。放在 core 中意味着 standalone 模式没有事实校验，agent 可以编造文件引用。
+
+#### Step 4.1: 迁移验证函数
+
+从 core 包移入 agent 包：
+- `verify.ts` → `packages/harness-agent/src/core/verify.ts`
+- `result-block.ts` → `packages/harness-agent/src/core/result-block.ts`
+- Fact/ResultBlock/VerifyReport/VerifyCheck 接口 → `packages/harness-agent/src/core/verify-types.ts`
+
+#### Step 4.2: 创建 FactVerificationMiddleware
+
+`packages/harness-agent/src/core/fact-verification.ts`
+
+- afterModel 钩子（priority = PRIORITY_EXTRACT = 90）
+- 从 LLM response 中提取文本，调用 extractResultBlock()
+- 有 HK_RESULT 时调用 verifyFacts()
+- FAIL 时注入 user message 到 context.messages
+- PASS/FAIL 时更新 ChangeTracker metadata
+
+#### Step 4.3: 注册为默认 middleware
+
+在 HarnessAgentSession.start() 中注册 FactVerificationMiddleware，与 ChangeTracker、ToolCallGuardrail 等并列。
+
+#### Step 4.4: 更新 core 包
+
+- core 的 verify.ts/result-block.ts 改为从 `@harness-kit/agent` re-export
+- core 的 index.ts 使用 agent 包的验证函数
+- core 的 turn_end 钩子保留 PI 特有逻辑（telemetry、sendUserMessage）
+
+#### Step 4.5: 迁移测试
+
+- verify.test.ts、result-block.test.ts 从 core 迁移到 agent
+- 新建 fact-verification.test.ts（middleware 单元测试）
+
+### Phase 5: Error Recovery + Planning（借鉴 prax-agent）
 
 #### Step 4.1: 结构化错误恢复
 
@@ -457,7 +714,7 @@ enum RecoveryAction {
 - `depends_on` 边缘 → 拓扑排序 → 执行顺序
 - 失败时降级到静态模板
 
-### Phase 5: 迁移 + 测试
+### Phase 6: 迁移 + 测试
 
 #### Step 5.1: 迁移 harness-kit extension
 
@@ -510,11 +767,16 @@ enum RecoveryAction {
    - Agent A 转述 Agent B 的完整输出
 3. **Middleware**: 验证 synthetic tool call 可以强制 LLM 重试
 4. **ChangeTracker**: 验证 code_gen/verified_gen 追踪正确
-5. **Compaction**:
+5. **事实校验（Phase 4）**:
+   - standalone CLI 模式自动校验 `<HK_RESULT>` 中的事实
+   - PASS 时更新 ChangeTracker verifiedGen
+   - FAIL 时注入 user message，LLM 下一轮看到并修正
+   - core 包从 agent 包导入验证函数，PI 模式 telemetry 不受影响
+6. **Compaction**:
    - 动态组装上下文（最新消息 + @ 引用 + LLM 判断）
    - wiki 双重角色：静态背景 + 动态记忆源
    - 异步：wiki 生成不阻塞 agent
    - 检索：`search_memory` 工具可以找到历史信息
    - 不丢失：完整对话在 session.jsonl，永不删除
-6. **Error Recovery**: 验证错误分类和恢复策略正确触发
-7. **现有测试**: `pnpm run test` 全部通过
+7. **Error Recovery**: 验证错误分类和恢复策略正确触发
+8. **现有测试**: `pnpm run test` 全部通过

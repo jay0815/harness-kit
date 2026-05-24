@@ -56,7 +56,15 @@
 
 **Trade-off**: Extra `snapshotWorkspace()` call on phase completion. Traverses the workspace directory tree, but skips `.git/`, `.harness-kit/`, `node_modules/`. Informational only — does not block phase completion.
 
-## 8. Custom workflow with dual executor types
+## 8. Fact verification as core agent capability (not optional extension)
+
+**Decision**: `verifyFacts` 和 `extractResultBlock` 从 `@harness-kit/core` 移入 `@harness-kit/agent`，作为 FactVerificationMiddleware 自动注册到 agent pipeline 中。任何运行模式（standalone CLI 或 PI Extension）都自动生效。
+
+**Why**: 事实校验是"agent 是否可信"的核心机制。放在 core 中意味着 standalone 模式没有校验，agent 可以编造文件引用。verify.ts、result-block.ts 是纯函数（零外部依赖），天然属于 agent 包。通过牺牲速度换取准确性。
+
+**Trade-off**: core 的 turn_end 钩子仍会执行一次校验（用于 PI 特有的 telemetry 和 sendUserMessage）。两层校验有微量重复开销，但保证了 PI 模式下的 observability 不受影响。
+
+## 9. Custom workflow with dual executor types
 
 **Decision**: Support user-defined workflows via YAML configuration with two executor types: `llm` and `code`. Code executor supports both shell commands and external scripts. Inter-phase data flow via `{{phaseName.output}}` template substitution.
 

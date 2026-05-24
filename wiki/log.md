@@ -146,3 +146,111 @@
 - `middlewares.test.ts` — VerificationGuidance, ToolCallGuardrail, QualityGate, IntentGate (18 tests)
 - `agent-a.test.ts` — 创建, 初步评估, 模糊输入, 问题, 任务 (6 tests)
 - `streaming-tool-executor.test.ts` — sequential, parallel, never-parallel, error handling, missing tool (5 tests)
+
+## [2026-05-25] feat | Phase 2: Session 层 + ExtensionAPI
+
+**Phase 2 完成**，实现与 PI AgentSession 接口兼容的 session 层。
+
+### HarnessAgentSession (`session/harness-session.ts`)
+- 封装完整 agent 生命周期：start/prompt/abort/shutdown
+- ExtensionAPI adapter 提供事件订阅（on/emit）
+- 内部使用 runAgentLoop + MiddlewarePipeline
+- 每次 prompt 创建新 pipeline，注册默认 middleware
+
+### Event Bridge (`session/event-bridge.ts`)
+- PI 风格事件桥接：AssistantMessage → turn_end/message_start 等事件
+- toolCall → tool_use 兼容：`input: block.input ?? block.arguments`
+
+### 测试
+- 11 个 inline mock 从 async generator 迁移到 stream.result() 协议
+- event-bridge 测试：input/arguments 兼容性
+- harness-session 测试：session 生命周期、prompt/abort/shutdown
+
+## [2026-05-25] feat | Phase 3: Standalone CLI
+
+**Phase 3 完成**，harness-agent 可独立运行，不依赖 PI runtime。
+
+### CLI 入口 (`cli.ts`)
+- 参数解析（args.ts）：--provider, --model, --workspace, --system-prompt, --max-iterations, --no-extension
+- 配置解析（config.ts）：使用 pi-ai 的 getModel/getModels/getProviders/getEnvApiKey
+- 交互式 REPL（repl.ts）：SIGINT/SIGTERM 处理、busy 锁、扩展加载
+- 输出格式化（output.ts）：turn_start/end、tool_start/end、agent_end
+
+### agent-loop.ts 修复
+- collectStream() 改用 stream.result() 消费 AssistantMessageEventStream
+- tool result message 改为 role: "toolResult" + toolName + timestamp
+- error/abort 时清晰抛出，不静默返回空响应
+
+### 循环依赖解决
+- CLI 通过非字面量动态 import("@harness-kit/core") 加载扩展
+- core 作为 optional peerDependency，不放 devDependencies
+
+### 测试
+- faux-integration.test.ts：3 个集成测试使用 registerFauxProvider()
+- args.test.ts：16 个参数解析测试
+- config.test.ts：11 个配置解析测试
+- output.test.ts：8 个输出格式化测试
+- repl.test.ts：5 个 session 集成测试
+
+## [2026-05-25] docs | README 重写
+
+- 重写 README.md：从 PI Extension 描述转为独立 agent runtime 方向
+- 新增"为什么从编排外部 agent 转向自己就是 agent"说明
+- 更新包结构：@harness-kit/agent（独立 runtime）+ @harness-kit/core（可选 PI Extension）
+- 更新 Agent 输出契约、CLI 用法、设计文档链接
+
+## [2026-05-25] design | 事实校验迁移计划
+
+**决定**：将事实校验从 @harness-kit/core 移入 @harness-kit/agent 作为固定能力。
+
+**动机**：
+- 独立运行（CLI bare mode）时没有事实校验，agent 可以编造文件引用
+- 事实校验是"agent 是否可信"的核心机制，不应是可选扩展
+- verify.ts、result-block.ts、types.ts 是纯函数，零外部依赖，天然属于 agent 包
+
+**方案**：
+- 新建 FactVerificationMiddleware（afterModel hook，priority 90）
+- 从 core 迁移 verify.ts、result-block.ts、verify-types.ts 到 agent 包
+- core 改为从 agent 包导入验证函数，保留 PI 特有逻辑（telemetry、sendUserMessage）
+- 与 ChangeTracker 集成：PASS 时更新 verifiedGen
+
+**原则**：通过牺牲速度换取准确性。计划落盘为下一阶段实施目标。
+
+## [2026-05-25] design | Agent A 评估机制重设计
+
+**问题**：`assessInput()` 用 `includes("implement")`、`includes("fix")` 做任务分类，复杂度用词数估算。对真实输入太脆弱。
+
+**决定**：评估 agent 改为独立 LLM 调用，上下文隔离。
+
+**核心思考**：
+- 单 agent + 好的 system prompt + 工具，天然能做任务评估和执行
+- 但评估质量会被主 agent 的上下文污染（沉没成本偏见、已有对话历史干扰）
+- 独立评估 agent 的价值：上下文隔离 → 客观性 → 可替换性
+- 给评估 agent 工具（read_file、list_files），可以读代码辅助判断复杂度和风险
+
+**方案**：
+- assessInput() 改为 LLM 调用，结构化 prompt + JSON 输出
+- 评估 agent 有自己的 system prompt（强调风险评估、任务分解）
+- 评估 agent 只有只读工具（read_file、list_files）
+- 评估 agent 输出：understood、taskOverview、complexity（附理由）、risk（附理由）、needsAgentB、clarificationNeeded
+
+**收益**：关键词匹配 → 语义理解，词数估算 → 代码规模分析，硬编码规则 → prompt 迭代。
+
+计划落盘到 wiki/agent-runtime-plan.md。
+
+## [2026-05-25] design | Subagent 调度设计 + pi-ai 解耦
+
+**Subagent 调度设计**（待细化）：
+- "claude -p 作为 subagent" 只有方向没有具体设计
+- 待回答：上下文怎么注入、输出协议（<HK_RESULT> 从哪来）、失败处理、多 subagent 协调
+- 方案：主 agent 构建 context → 启动 subagent（claude -p / codex）→ 收集输出 → 事实校验 → 失败重试
+- 需要定义 subagent 调度协议（system prompt 模板、输出格式、超时配置）
+
+**pi-ai 解耦**（优先级最低）：
+- StreamFn、AssistantMessage、Model 等核心类型全部来自 pi-ai
+- 消息格式（role: "toolResult"、toolCallId）是 pi-ai 的约定
+- 测试 mock 基于 registerFauxProvider
+- 当前 pi-ai 工作正常，解耦成本高、收益不明确
+- 未来路径：定义自有消息格式 → 通用 stream 协议 → 转换层 → 替换 mock
+
+计划落盘到 wiki/agent-runtime-plan.md。
