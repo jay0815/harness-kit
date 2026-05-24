@@ -82,7 +82,8 @@ export function substituteTemplate(
   template: string,
   results: Map<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+)\.output\}\}/g, (_match, phaseName) => {
+  // Allow hyphens in phase names: {{check-env.output}}
+  return template.replace(/\{\{([\w-]+)\.output\}\}/g, (_match, phaseName) => {
     const output = results.get(phaseName);
     if (output === undefined) {
       return `{{${phaseName}.output}}`; // Keep as-is if not found

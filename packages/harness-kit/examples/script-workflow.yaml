@@ -1,0 +1,16 @@
+workflow: with-scripts
+description: 使用外部脚本的 workflow 示例
+
+phases:
+  - name: check-env
+    executor: code
+    script: "./examples/scripts/check-env.ts"
+    args: ["--env=NODE_ENV", "--env=PATH"]
+
+  - name: analyze
+    executor: llm
+    prompt: |
+      环境检查结果：
+      {{check-env.output}}
+
+      请确认环境是否正常。

@@ -1,0 +1,44 @@
+workflow: code-quality
+description: 代码质量检查流程（示例）
+
+phases:
+  # Phase 1: LLM 分析代码结构
+  - name: analyze
+    executor: llm
+    prompt: |
+      分析当前代码库的结构，列出：
+      1. 主要模块
+      2. 依赖关系
+      3. 潜在问题
+
+  # Phase 2: 运行 lint 检查
+  - name: lint
+    executor: code
+    command: "pnpm run lint || true"
+
+  # Phase 3: 运行类型检查
+  - name: typecheck
+    executor: code
+    command: "pnpm run typecheck || true"
+
+  # Phase 4: 运行测试
+  - name: test
+    executor: code
+    command: "pnpm run test || true"
+
+  # Phase 5: LLM 综合审查（引用前面的结果）
+  - name: review
+    executor: llm
+    prompt: |
+      基于以下检查结果，给出代码改进建议：
+
+      ## Lint 结果
+      {{lint.output}}
+
+      ## 类型检查结果
+      {{typecheck.output}}
+
+      ## 测试结果
+      {{test.output}}
+
+      请按优先级列出需要修复的问题。

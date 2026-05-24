@@ -1,0 +1,14 @@
+workflow: hello-world
+description: 最简单的示例 workflow
+
+phases:
+  - name: echo
+    executor: code
+    command: "echo 'Hello from code executor!'"
+
+  - name: greet
+    executor: llm
+    prompt: |
+      上一步输出了：{{echo.output}}
+
+      请用一句话总结这个输出。
