@@ -87,3 +87,62 @@
 - Dry-run 模式：executeWorkflow({ dryRun: true }) 只验证不执行
 - 新增 4 个模块：workflow-schema, workflow-loader, code-executor, workflow-executor
 - 40 个新测试，总计 75 个测试全部通过
+
+## [2026-05-24] design | Agent Runtime 重构计划
+
+- 决定构建自有 agent runtime，替代 PI 黑盒
+- 研究三个参考项目：prax-agent（middleware）、pi-coding-agent（loop/session）、hermes-agent（compaction/toolset）
+- 关键决策：双 Agent 架构（Agent A 转述者 + Agent B 执行者）
+- Compaction 哲学：动态上下文组装，不是压缩摘要
+- Wiki 双重角色：静态背景（system prompt）+ 动态记忆源（search_memory 工具）
+- 计划落盘：wiki/agent-runtime-plan.md
+
+## [2026-05-24] feat | Phase 1: 双 Agent Loop + Middleware
+
+**Phase 1 全部完成**，新增 `packages/harness-agent/` 包。
+
+### Step 1.1: 类型系统 (`core/types.ts`)
+- 双 Agent 类型：AgentAState, AgentBState, TaskResult, TaskSummary, AgentAPreliminaryAssessment
+- Middleware 类型：AgentMiddleware (4 hooks), RuntimeState, LLMResponse, TokenUsage
+- IterationBudget：线程安全的 consume/refund 计数器
+- Priority 常量：GUARD=10, CACHE=20, INJECT=50, EXTRACT=90, EVAL=95
+
+### Step 1.2: Agent A + Agent B (`core/agent-a.ts`, `core/agent-b.ts`)
+- Agent A：初步评估（理解意图 + 复杂度/风险），不清楚时澄清，整理记忆后委托 Agent B
+- Agent B：任务驱动执行者，token >= 90% 时自动交接给新 Agent B
+- Agent A 只保留任务结果摘要，细节从 wiki/JSONL 按需读取
+
+### Step 1.3: StreamingToolExecutor (`core/streaming-tool-executor.ts`)
+- 并行/串行工具调度
+- PARALLEL_SAFE_TOOLS（read_file, grep, glob）用 Promise.all 并行
+- NEVER_PARALLEL_TOOLS（write_file, edit_file）串行执行
+- 最大并发数可配置（默认 8）
+
+### Step 1.4: ChangeTracker (`core/change-tracker.ts`)
+- Single-writer 原则：唯一写入 change_tracker 状态的 middleware
+- codeGen: code-modifying tool 成功后递增
+- verifiedGen: verify 通过后设为 codeGen
+- 辅助函数：hasUnverifiedChanges, getLastVerifyError, isLastVerifyOk
+
+### Step 1.5: 基础 middleware (`core/middlewares.ts`)
+- VerificationGuidanceMiddleware (priority 60): 验证后注入引导消息
+- ToolCallGuardrailMiddleware (priority 10): per-turn 模式追踪，阻止重复失败
+- QualityGateMiddleware (priority 95): synthetic tool call 阻止未验证的完成
+- IntentGateMiddleware (priority 50): 强制 LLM 先 verbalize 计划
+
+### 中间件 Pipeline (`core/middleware.ts`)
+- MiddlewarePipeline: priority-sorted chain，4 个 hook 点
+- runBeforeModel, runAfterModel, runBeforeTool, runAfterTool
+
+### 核心循环 (`core/agent-loop.ts`)
+- runAgentLoop: 集成 middleware pipeline 的核心循环
+- IterationBudget 驱动，支持 steering/followUp 消息
+- 工具执行经过完整的 middleware chain
+
+### 测试用例 (6 个测试文件, 58 个测试)
+- `types.test.ts` — IterationBudget (7 tests), 常量 (2 tests)
+- `middleware.test.ts` — Pipeline priority ordering, chaining, blocking, unregister, empty pipeline (7 tests)
+- `change-tracker.test.ts` — codeGen/verifiedGen tracking, verify commands, helper functions (13 tests)
+- `middlewares.test.ts` — VerificationGuidance, ToolCallGuardrail, QualityGate, IntentGate (18 tests)
+- `agent-a.test.ts` — 创建, 初步评估, 模糊输入, 问题, 任务 (6 tests)
+- `streaming-tool-executor.test.ts` — sequential, parallel, never-parallel, error handling, missing tool (5 tests)

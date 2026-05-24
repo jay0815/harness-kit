@@ -1,0 +1,161 @@
+import type {
+  AgentMiddleware,
+  AgentTool,
+  AgentToolCall,
+  AgentToolResult,
+  LLMResponse,
+  RuntimeState,
+} from "./types.js";
+import { PRIORITY_GUARD } from "./types.js";
+
+export const CHANGE_TRACKER_KEY = "change_tracker";
+
+// Tools that modify code
+const CODE_MODIFYING_TOOLS = new Set([
+  "write_file", "edit_file", "delete_file",
+  "Write", "Edit", "MultiEdit",
+]);
+
+interface TrackerState {
+  codeGen: number;
+  verifiedGen: number;
+  lastVerifyOk: boolean;
+  lastVerifyError: string | null;
+}
+
+function defaultTrackerState(): TrackerState {
+  return {
+    codeGen: 0,
+    verifiedGen: 0,
+    lastVerifyOk: false,
+    lastVerifyError: null,
+  };
+}
+
+function getTracker(state: RuntimeState): TrackerState {
+  let tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
+  if (!tracker) {
+    tracker = defaultTrackerState();
+    state.metadata[CHANGE_TRACKER_KEY] = tracker;
+  }
+  return tracker;
+}
+
+/**
+ * ChangeTracker middleware — single-writer of code-change / verification state.
+ *
+ * Tracks:
+ * - codeGen: incremented on each successful code-modifying tool call
+ * - verifiedGen: set to codeGen when verification passes
+ * - lastVerifyOk: true after passing verification, false after failure
+ * - lastVerifyError: trimmed failure output from most recent failing verify
+ *
+ * Other middleware read CHANGE_TRACKER_KEY from RuntimeState.metadata (read-only).
+ */
+export class ChangeTracker implements AgentMiddleware {
+  priority = PRIORITY_GUARD; // 5 — runs first
+  name = "ChangeTracker";
+
+  async afterTool(
+    state: RuntimeState,
+    toolCall: AgentToolCall,
+    _tool: AgentTool | undefined,
+    result: AgentToolResult<any>,
+  ): Promise<AgentToolResult<any>> {
+    // Only track relevant tools
+    const isCode = CODE_MODIFYING_TOOLS.has(toolCall.name);
+    const isVerify = this.isVerifyAttempt(toolCall);
+
+    if (!isCode && !isVerify) return result;
+
+    // Verify failure: track error state but don't update verifiedGen
+    if (result.isError) {
+      if (isVerify) {
+        const tracker = getTracker(state);
+        tracker.lastVerifyOk = false;
+        tracker.lastVerifyError = this.extractError(result);
+      }
+      return result;
+    }
+
+    const tracker = getTracker(state);
+
+    // Increment codeGen on code-modifying tool success
+    if (isCode) {
+      tracker.codeGen++;
+    }
+
+    // Update verification state
+    if (isVerify) {
+      tracker.verifiedGen = tracker.codeGen;
+      tracker.lastVerifyOk = true;
+      tracker.lastVerifyError = null;
+    }
+
+    return result;
+  }
+
+  private isVerifyAttempt(toolCall: AgentToolCall): boolean {
+    if (toolCall.name === "verify" || toolCall.name === "VerifyCommand") return true;
+    if (toolCall.name === "bash" || toolCall.name === "Bash") {
+      const command = String((toolCall as any).input?.command ?? "").trim();
+      return isVerifyCommand(command);
+    }
+    return false;
+  }
+
+  private extractError(result: AgentToolResult<any>): string {
+    const text = result.content
+      .filter((c) => c.type === "text")
+      .map((c) => (c as any).text)
+      .join("");
+    return text.slice(0, 500);
+  }
+}
+
+/**
+ * Check if a command is a verification command (test, lint, typecheck).
+ */
+function isVerifyCommand(command: string): boolean {
+  const verifyPatterns = [
+    /\bnpm\s+(run\s+)?test\b/,
+    /\bpnpm\s+(run\s+)?test\b/,
+    /\byarn\s+(run\s+)?test\b/,
+    /\bvitest\b/,
+    /\bjest\b/,
+    /\bpytest\b/,
+    /\bcargo\s+test\b/,
+    /\bgo\s+test\b/,
+    /\bnpm\s+(run\s+)?lint\b/,
+    /\bpnpm\s+(run\s+)?lint\b/,
+    /\bnpm\s+(run\s+)?typecheck\b/,
+    /\bpnpm\s+(run\s+)?typecheck\b/,
+    /\btsc\s+--noEmit\b/,
+  ];
+  return verifyPatterns.some((p) => p.test(command));
+}
+
+/**
+ * Helper: check if there are unverified code changes.
+ */
+export function hasUnverifiedChanges(state: RuntimeState): boolean {
+  const tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
+  if (!tracker) return false;
+  return tracker.codeGen > tracker.verifiedGen;
+}
+
+/**
+ * Helper: get the last verification error.
+ */
+export function getLastVerifyError(state: RuntimeState): string | null {
+  const tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
+  return tracker?.lastVerifyError ?? null;
+}
+
+/**
+ * Helper: check if last verification passed.
+ */
+export function isLastVerifyOk(state: RuntimeState): boolean {
+  const tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
+  return tracker?.lastVerifyOk ?? false;
+}
