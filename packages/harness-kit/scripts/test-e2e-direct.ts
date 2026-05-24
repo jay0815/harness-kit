@@ -86,28 +86,7 @@ async function main(): Promise<void> {
 
     // 3. Send task
     console.log("\n3. Sending task...");
-    const taskMsg = [
-      "Analyze the codebase and report findings.",
-      "",
-      "<HK_RESULT>",
-      JSON.stringify({
-        currentWork: "describe what you did in this task",
-        facts: [
-          {
-            file: "relative/path/to/file.ts",
-            startLine: 1,
-            endLine: 3,
-            exactText: "exact text as it appears in the file",
-          },
-        ],
-        reasoning: "optional reasoning",
-      }, null, 2),
-      "</HK_RESULT>",
-      "",
-      "Required fields:",
-      "- currentWork: describe what you did",
-      "- facts: array of {file, startLine, endLine, exactText}",
-    ].join("\n");
+    const taskMsg = "Analyze the codebase and report findings.";
 
     typeToPane(paneId, taskMsg);
     sendKeysToPane(paneId, "Enter");

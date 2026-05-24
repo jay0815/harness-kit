@@ -56,9 +56,10 @@ export function labelPane(paneId: string, label: string): void {
  * @param command Full command to launch the coding agent (e.g. "claude-code")
  */
 export function startAgentInPane(paneId: string, command: string): void {
-  // Satisfy read guard first
+  // Each type/keys call clears the read guard, so read before each interaction
   bridge(["read", paneId, "5"]);
   bridge(["type", paneId, command]);
+  bridge(["read", paneId, "5"]);
   bridge(["keys", paneId, "Enter"]);
 }
 
