@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, beforeEach, afterEach, expect } from "vitest";
 import { readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,10 +22,10 @@ afterEach(() => {
 describe("telemetry", () => {
   it("initTelemetry returns session ID and creates log file", () => {
     const sid = initTelemetry(logFile);
-    assert.ok(sid.length > 0, "session ID should not be empty");
-    assert.equal(getLogPath(), logFile);
-    assert.equal(getSessionId(), sid);
-    assert.ok(existsSync(logFile), "log file should exist after init");
+    expect(sid.length).toBeGreaterThan(0);
+    expect(getLogPath()).toBe(logFile);
+    expect(getSessionId()).toBe(sid);
+    expect(existsSync(logFile)).toBe(true);
   });
 
   it("emit writes JSONL lines to file", () => {
@@ -36,26 +35,24 @@ describe("telemetry", () => {
     flush();
 
     const lines = readFileSync(logFile, "utf-8").trim().split("\n");
-    // First line is session start, then 2 emits
-    assert.equal(lines.length, 3);
+    expect(lines.length).toBe(3);
 
     const event1 = JSON.parse(lines[1]!);
-    assert.equal(event1.type, "tool_call");
-    assert.equal(event1.action, "start");
-    assert.deepEqual(event1.data, { tool: "acp_send" });
-    assert.ok(event1.ts, "should have timestamp");
-    assert.equal(event1.durationMs, undefined);
+    expect(event1.type).toBe("tool_call");
+    expect(event1.action).toBe("start");
+    expect(event1.data).toEqual({ tool: "acp_send" });
+    expect(event1.ts).toBeTruthy();
+    expect(event1.durationMs).toBeUndefined();
 
     const event2 = JSON.parse(lines[2]!);
-    assert.equal(event2.type, "tool_call");
-    assert.equal(event2.action, "end");
-    assert.equal(event2.durationMs, 150);
+    expect(event2.type).toBe("tool_call");
+    expect(event2.action).toBe("end");
+    expect(event2.durationMs).toBe(150);
   });
 
   it("emit is no-op before init", () => {
-    // Should not throw
     emit("test", "noop", {});
-    assert.ok(!existsSync(logFile), "no file should be created");
+    expect(existsSync(logFile)).toBe(false);
   });
 
   it("close writes session end event", () => {
@@ -64,8 +61,8 @@ describe("telemetry", () => {
 
     const lines = readFileSync(logFile, "utf-8").trim().split("\n");
     const lastEvent = JSON.parse(lines.at(-1)!);
-    assert.equal(lastEvent.type, "session");
-    assert.equal(lastEvent.action, "end");
+    expect(lastEvent.type).toBe("session");
+    expect(lastEvent.action).toBe("end");
   });
 
   it("multiple inits create separate sessions", () => {
@@ -83,11 +80,11 @@ describe("telemetry", () => {
     const lines1 = readFileSync(file1, "utf-8").trim().split("\n");
     const lines2 = readFileSync(file2, "utf-8").trim().split("\n");
 
-    assert.ok(lines1.length >= 2, "first session should have events");
-    assert.ok(lines2.length >= 2, "second session should have events");
+    expect(lines1.length).toBeGreaterThanOrEqual(2);
+    expect(lines2.length).toBeGreaterThanOrEqual(2);
 
     const sid1 = JSON.parse(lines1[0]!).data.sessionId;
     const sid2 = JSON.parse(lines2[0]!).data.sessionId;
-    assert.notEqual(sid1, sid2, "session IDs should differ");
+    expect(sid1).not.toBe(sid2);
   });
 });

@@ -7,9 +7,8 @@ harness-kit is a PI Extension that orchestrates coding agents through structured
 ## Quick Start
 
 ```bash
-cd packages/harness-kit
-npm install
-npm run build
+pnpm install
+pnpm run build
 # Load as PI extension:
 pi --extension ./dist/index.js
 ```
@@ -35,6 +34,8 @@ PI Agent (harness-kit extension)
 | `src/verify.ts` | Hard fact verification |
 | `src/workflow.ts` | Hardcoded 3-phase workflow |
 | `src/cli.ts` | Standalone `harness-verify` CLI |
+| `src/telemetry.ts` | JSONL event recording |
+| `src/telemetry-cli.ts` | Telemetry analysis CLI |
 
 ## Agent Output Contract
 
@@ -60,8 +61,11 @@ Coding agents driven by harness-kit MUST output results in this exact format:
 ## Testing
 
 ```bash
-npm run build
-node --test dist/*.test.js       # unit tests
+pnpm run test          # vitest unit tests
+pnpm run test:watch    # vitest watch mode
+pnpm run lint          # oxlint
+pnpm run typecheck     # tsc --noEmit
+pnpm run test:e2e      # E2E (requires tmux)
 ```
 
 ## Design Decisions

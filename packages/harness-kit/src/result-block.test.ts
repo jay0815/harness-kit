@@ -1,5 +1,4 @@
-import assert from "node:assert";
-import test from "node:test";
+import { describe, it, expect } from "vitest";
 import { extractResultBlock, hasCompleteResultBlock } from "./result-block.js";
 
 const validBlock = `<HK_RESULT>
@@ -17,37 +16,41 @@ const validBlock = `<HK_RESULT>
 }
 </HK_RESULT>`;
 
-test("extractResultBlock parses valid block", () => {
-  const result = extractResultBlock(validBlock);
-  assert.ok(result);
-  assert.strictEqual(result!.currentWork, "Implemented auth middleware");
-  assert.strictEqual(result!.facts.length, 1);
-  assert.strictEqual(result!.facts[0].file, "src/auth.ts");
+describe("extractResultBlock", () => {
+  it("parses valid block", () => {
+    const result = extractResultBlock(validBlock);
+    expect(result).not.toBeNull();
+    expect(result!.currentWork).toBe("Implemented auth middleware");
+    expect(result!.facts.length).toBe(1);
+    expect(result!.facts[0].file).toBe("src/auth.ts");
+  });
+
+  it("returns last block when multiple exist", () => {
+    const multi = `${validBlock}\nsome noise\n<HK_RESULT>{"currentWork":"second"}</HK_RESULT>`;
+    const result = extractResultBlock(multi);
+    expect(result).not.toBeNull();
+    expect(result!.currentWork).toBe("second");
+  });
+
+  it("returns null for incomplete block", () => {
+    expect(extractResultBlock("<HK_RESULT>{")).toBeNull();
+  });
+
+  it("returns null for no block", () => {
+    expect(extractResultBlock("just terminal output")).toBeNull();
+  });
+
+  it("ignores extra fields", () => {
+    const block = `<HK_RESULT>{"currentWork":"x","facts":[],"extra":123}</HK_RESULT>`;
+    const result = extractResultBlock(block);
+    expect(result).not.toBeNull();
+    expect(result!.currentWork).toBe("x");
+  });
 });
 
-test("extractResultBlock returns last block when multiple exist", () => {
-  const multi = `${validBlock}\nsome noise\n<HK_RESULT>{"currentWork":"second"}</HK_RESULT>`;
-  const result = extractResultBlock(multi);
-  assert.ok(result);
-  assert.strictEqual(result!.currentWork, "second");
-});
-
-test("extractResultBlock returns null for incomplete block", () => {
-  assert.strictEqual(extractResultBlock("<HK_RESULT>{"), null);
-});
-
-test("extractResultBlock returns null for no block", () => {
-  assert.strictEqual(extractResultBlock("just terminal output"), null);
-});
-
-test("hasCompleteResultBlock detects completion", () => {
-  assert.strictEqual(hasCompleteResultBlock(validBlock), true);
-  assert.strictEqual(hasCompleteResultBlock("<HK_RESULT>{"), false);
-});
-
-test("extractResultBlock ignores extra fields", () => {
-  const block = `<HK_RESULT>{"currentWork":"x","facts":[],"extra":123}</HK_RESULT>`;
-  const result = extractResultBlock(block);
-  assert.ok(result);
-  assert.strictEqual(result!.currentWork, "x");
+describe("hasCompleteResultBlock", () => {
+  it("detects completion", () => {
+    expect(hasCompleteResultBlock(validBlock)).toBe(true);
+    expect(hasCompleteResultBlock("<HK_RESULT>{")).toBe(false);
+  });
 });

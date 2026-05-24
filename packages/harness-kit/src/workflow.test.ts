@@ -1,18 +1,19 @@
-import assert from "node:assert";
-import test from "node:test";
+import { describe, it, expect } from "vitest";
 import { createDefaultWorkflow } from "./workflow.js";
 
-test("createDefaultWorkflow returns 3 phases", () => {
-  const wf = createDefaultWorkflow();
-  assert.strictEqual(wf.phases.length, 3);
-  assert.strictEqual(wf.phases[0].name, "design");
-  assert.strictEqual(wf.phases[1].name, "implement");
-  assert.strictEqual(wf.phases[2].name, "test");
-});
+describe("createDefaultWorkflow", () => {
+  it("returns 3 phases", () => {
+    const wf = createDefaultWorkflow();
+    expect(wf.phases.length).toBe(3);
+    expect(wf.phases[0].name).toBe("design");
+    expect(wf.phases[1].name).toBe("implement");
+    expect(wf.phases[2].name).toBe("test");
+  });
 
-test("design phase requires human confirmation", () => {
-  const wf = createDefaultWorkflow();
-  assert.strictEqual(wf.phases[0].humanConfirm, true);
-  assert.strictEqual(wf.phases[1].humanConfirm, false);
-  assert.strictEqual(wf.phases[2].humanConfirm, true);
+  it("design phase requires human confirmation", () => {
+    const wf = createDefaultWorkflow();
+    expect(wf.phases[0].humanConfirm).toBe(true);
+    expect(wf.phases[1].humanConfirm).toBe(false);
+    expect(wf.phases[2].humanConfirm).toBe(true);
+  });
 });
