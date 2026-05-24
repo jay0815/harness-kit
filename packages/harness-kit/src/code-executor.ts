@@ -1,7 +1,13 @@
-import { execSync, type SpawnSyncReturns } from "node:child_process";
+import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PhaseConfig, PhaseResult } from "./workflow-schema.js";
+
+interface ExecSyncError extends Error {
+  status: number | null;
+  stdout: Buffer | null;
+  stderr: Buffer | null;
+}
 
 export interface ExecuteCodeOptions {
   phase: PhaseConfig;
@@ -55,7 +61,7 @@ export async function executeCode(options: ExecuteCodeOptions): Promise<PhaseRes
       durationMs: Date.now() - startTime,
     };
   } catch (err: unknown) {
-    const execErr = err as SpawnSyncReturns<Buffer> & { status: number | null };
+    const execErr = err as ExecSyncError;
     const stdout = execErr.stdout?.toString("utf-8")?.trim() ?? "";
     const stderr = execErr.stderr?.toString("utf-8")?.trim() ?? "";
 

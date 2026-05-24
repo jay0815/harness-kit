@@ -14,6 +14,16 @@ let logPath = "";
 let sessionId = "";
 
 export function initTelemetry(outputPath?: string): string {
+  // Close existing fd if re-initializing
+  if (fd !== null) {
+    try {
+      closeSync(fd);
+    } catch {
+      // Ignore close errors
+    }
+    fd = null;
+  }
+
   sessionId = Date.now().toString(36);
   logPath = outputPath ?? join(process.cwd(), ".harness-kit", "telemetry", `${sessionId}.jsonl`);
   mkdirSync(dirname(logPath), { recursive: true });

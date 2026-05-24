@@ -61,7 +61,9 @@ export const startAgentTool: ToolDefinition<typeof startAgentSchema> = {
 
       let cmd = params.executor;
       if (params.contextFiles && params.contextFiles.length > 0) {
-        cmd += ` ${params.contextFiles.join(" ")}`;
+        // Escape paths with spaces using shell quoting
+        const escapedFiles = params.contextFiles.map((f) => `'${f.replace(/'/g, "'\\''")}'`);
+        cmd += ` ${escapedFiles.join(" ")}`;
       }
 
       startAgentInPane(paneId, cmd);

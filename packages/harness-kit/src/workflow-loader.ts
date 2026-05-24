@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { Value } from "@sinclair/typebox/value";
-import type { WorkflowConfig, PhaseConfig } from "./workflow-schema.js";
+import type { WorkflowConfig } from "./workflow-schema.js";
 import { WorkflowConfig as WorkflowConfigSchema } from "./workflow-schema.js";
 
 export class WorkflowLoadError extends Error {
@@ -71,7 +71,12 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
       }
       // Script path is relative to workflow file
       if (phase.script) {
-        resolve(baseDir, phase.script);
+        const scriptPath = resolve(baseDir, phase.script);
+        if (!existsSync(scriptPath)) {
+          throw new WorkflowLoadError(
+            `Phase "${phase.name}": script not found: ${scriptPath}`,
+          );
+        }
       }
     }
   }

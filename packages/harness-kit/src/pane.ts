@@ -117,16 +117,19 @@ export function listPanes(): PaneInfo[] {
   // Parse tmux-bridge list output:
   // TARGET SESSION:WIN SIZE PROCESS LABEL CWD
   // %3 0:0.0 80x24 zsh - /Users/...
+  // Use regex for more robust parsing - handle spaces in CWD
+  const panePattern = /^(\S+)\s+\S+\s+\S+\s+(\S+)\s+(\S+)\s+/;
   return output
     .split("\n")
     .slice(1) // skip header
     .map((line) => {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 6) return null;
+      const match = panePattern.exec(line.trim());
+      if (!match) return null;
+      const [, id, process, label] = match;
       return {
-        id: parts[0]!,
-        label: parts[4] !== "-" ? parts[4]! : parts[0]!,
-        executor: parts[3]!,
+        id: id!,
+        label: label !== "-" ? label! : id!,
+        executor: process!,
       };
     })
     .filter((p): p is PaneInfo => p !== null);

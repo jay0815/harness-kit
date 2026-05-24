@@ -24,7 +24,7 @@ export const PhaseConfig = Type.Object({
   // LLM executor fields
   prompt: Type.Optional(Type.String()),
   contextFiles: Type.Optional(Type.Array(Type.String())),
-  humanConfirm: Type.Optional(Type.Boolean({ default: false })),
+  humanConfirm: Type.Optional(Type.Boolean()),
   // Code executor fields (union: command or script)
   command: Type.Optional(Type.String()),
   script: Type.Optional(Type.String()),

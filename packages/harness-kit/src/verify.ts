@@ -31,7 +31,9 @@ function verifyOneFact(fact: Fact, workspaceDir: string): VerifyCheck {
     };
   }
 
-  const lines = content.split("\n");
+  // Normalize CRLF to LF for consistent line handling
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const lines = normalizedContent.split("\n");
   const startIdx = fact.startLine - 1; // 1-indexed -> 0-indexed
   const endIdx = fact.endLine;         // exclusive
 
