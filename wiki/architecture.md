@@ -51,6 +51,26 @@ LLM output → turn_end event
 
 This makes harness-kit **defensive by default** — it works even with LLMs that have low instruction compliance.
 
+## Guardrails: Out-of-Scope Detection
+
+harness-kit tracks file changes during each phase to detect undeclared modifications:
+
+```
+Phase start → snapshotWorkspace() → before snapshot
+Phase end   → snapshotWorkspace() → after snapshot
+            → detectOutOfScope(before, after, declaredFiles)
+            → emit("guardrail", "out_of_scope", { files }) if any
+```
+
+**Purpose**: Catch when an LLM modifies files not declared in its `<HK_RESULT>` facts. This prevents "silent" changes that could break other parts of the codebase.
+
+**Implementation**:
+- `snapshotWorkspace()` — traverses workspace, skips `.git/`, `.harness-kit/`, `node_modules/`, records SHA256 hashes
+- `detectOutOfScope()` — compares before/after snapshots, filters out declared files, returns undeclared changes
+- Telemetry event `"guardrail:out_of_scope"` — lists files modified but not declared in facts
+
+**Behavior**: Informational only — does not block phase completion. Logs undeclared changes for review.
+
 ## Data Flow (Degraded Mode)
 
 ```
@@ -66,11 +86,12 @@ User → PI Agent → [system prompt injection] → LLM
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| Extension entry | `src/index.ts` | Register tools, inject system prompt, auto-verify on turn_end, init telemetry |
+| Extension entry | `src/index.ts` | Register tools, inject system prompt, auto-verify on turn_end, init telemetry, guardrails integration |
 | Tool definitions | `src/tools.ts` | 4 PI tools (start_agent, acp_send, acp_read, hard_verify) |
 | Pane manager | `src/pane.ts` | tmux/bridge subprocess calls (full mode only) |
 | Result parser | `src/result-block.ts` | Extract JSON from `<HK_RESULT>` blocks |
 | Verifier | `src/verify.ts` | Read file, slice lines, compare text |
+| Guardrails | `src/guardrails.ts` | Workspace snapshot and out-of-scope file detection |
 | Workflow | `src/workflow.ts` | Hardcoded 3-phase workflow (design → implement → test) |
 | Telemetry | `src/telemetry.ts` | JSONL event recording |
 | CLI | `src/cli.ts` | Standalone harness-verify |

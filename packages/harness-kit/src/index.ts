@@ -5,6 +5,7 @@ import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
 import { extractResultBlock } from "./result-block.js";
 import { verifyFacts } from "./verify.js";
 import { reconcileFromDisk, initState, saveArtifact, saveState } from "./state.js";
+import { snapshotWorkspace, detectOutOfScope } from "./guardrails.js";
 import type { HarnessState } from "./types.js";
 
 /**
@@ -20,6 +21,7 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
   const harnessPrompt = buildHarnessPrompt(workflow);
   let workspaceDir = process.cwd();
   let harnessState: HarnessState | null = null;
+  let phaseSnapshot: ReturnType<typeof snapshotWorkspace> | null = null;
 
   pi.on("session_start", (_event, ctx) => {
     workspaceDir = ctx.cwd;
@@ -35,6 +37,9 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
     } else {
       harnessState = initState(workflow, ctx.cwd);
     }
+
+    // Take initial snapshot for guardrails
+    phaseSnapshot = snapshotWorkspace(ctx.cwd);
   });
 
   pi.on("session_shutdown", () => {
@@ -117,6 +122,25 @@ export default function harnessKitExtension(pi: ExtensionAPI) {
       );
     } else if (harnessState && harnessState.currentPhase < harnessState.phases.length) {
       const phase = harnessState.phases[harnessState.currentPhase];
+
+      // Guardrails: check for out-of-scope file changes
+      if (phaseSnapshot) {
+        const afterSnapshot = snapshotWorkspace(workspaceDir);
+        const declaredFiles = block.facts.map((f) => f.file);
+        const outOfScope = detectOutOfScope(phaseSnapshot, afterSnapshot, declaredFiles);
+
+        if (outOfScope.length > 0) {
+          emit("guardrail", "out_of_scope", {
+            phase: harnessState.currentPhase,
+            phaseName: phase.name,
+            files: outOfScope,
+          });
+        }
+
+        // Update snapshot for next phase
+        phaseSnapshot = afterSnapshot;
+      }
+
       saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
       phase.status = "completed";
       phase.completedAt = new Date().toISOString();

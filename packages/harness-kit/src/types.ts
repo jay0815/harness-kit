@@ -66,6 +66,12 @@ export interface PhaseState {
   completedAt?: string;
 }
 
+export interface SnapshotEntry {
+  size: number;
+  mtimeNs: bigint;
+  sha256: string;
+}
+
 export interface HarnessState {
   schemaVersion: 1;
   workspaceDir: string;
@@ -73,4 +79,5 @@ export interface HarnessState {
   updatedAt: string;
   currentPhase: number;
   phases: PhaseState[];
+  phaseSnapshot?: Record<string, SnapshotEntry>;
 }

@@ -67,3 +67,12 @@
 - verifyFacts 验证失败时 pi.sendUserMessage 注入错误信息
 - 不依赖 LLM 主动调用 hard_verify，对所有 LLM 有效
 - telemetry 新增 auto_verify 事件类型
+
+## [2026-05-24] feat | Guardrails 越权写入检测
+
+- 新增 guardrails.ts：workspace 快照与越权文件检测
+- snapshotWorkspace()：遍历 workspace，跳过 .git/.harness-kit/node_modules，记录 SHA256
+- detectOutOfScope()：对比 phase 前后快照，检测未声明的文件变更
+- 集成到 index.ts：phase 完成时自动检测越权变更
+- telemetry 新增 guardrail:out_of_scope 事件类型
+- 8 个单元测试全部通过
