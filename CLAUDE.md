@@ -23,7 +23,7 @@ pnpm run typecheck        # tsc --noEmit
 
 ## Wiki
 
-Knowledge base. Consult before making changes.
+Knowledge base. **Always consult wiki before making changes or running commands.** If unsure about build/test commands, conventions, architecture, or tool usage — check wiki first, not memory or assumptions.
 
 - [index](wiki/index.md) — full catalog
 - [architecture](wiki/architecture.md) — system design, data flow
