@@ -7,20 +7,20 @@ pi-mono 采用严格的分层架构，上层依赖下层，禁止反向依赖。
 ```mermaid
 graph TB
     subgraph "用户界面层"
-        W[Web UI<br/>@mariozechner/pi-web-ui]
-        T[TUI<br/>@mariozechner/pi-tui]
+        W[Web UI<br/>@earendil-works/pi-web-ui]
+        T[TUI<br/>@earendil-works/pi-tui]
     end
 
     subgraph "会话编排层"
-        S[AgentSession<br/>@mariozechner/pi-coding-agent]
+        S[AgentSession<br/>@earendil-works/pi-coding-agent]
     end
 
     subgraph "代理运行时层"
-        A[Agent / Agent Loop<br/>@mariozechner/pi-agent-core]
+        A[Agent / Agent Loop<br/>@earendil-works/pi-agent-core]
     end
 
     subgraph "LLM 抽象层"
-        AI[pi-ai<br/>@mariozechner/pi-ai]
+        AI[pi-ai<br/>@earendil-works/pi-ai]
     end
 
     subgraph "Provider 实现层"

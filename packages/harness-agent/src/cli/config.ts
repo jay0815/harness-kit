@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { getModel, getModels, getProviders, getEnvApiKey, streamSimple } from "@mariozechner/pi-ai";
+import { getModel, getModels, getProviders, getEnvApiKey, streamSimple } from "@earendil-works/pi-ai";
 import type { Model, StreamFn } from "../core/types.js";
 import type { HarnessAgentSessionConfig } from "../session/types.js";
 import type { ParsedArgs } from "./args.js";

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { registerFauxProvider, streamSimple } from "@mariozechner/pi-ai";
+import { registerFauxProvider, streamSimple } from "@earendil-works/pi-ai";
 import { runAgentLoop } from "./agent-loop.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";

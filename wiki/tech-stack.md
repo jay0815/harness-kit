@@ -19,9 +19,9 @@
 
 | Package | Purpose |
 |---------|---------|
-| `@mariozechner/pi-coding-agent` | PI Extension API types |
-| `@mariozechner/pi-agent-core` | Agent loop |
-| `@mariozechner/pi-ai` | AI provider abstraction |
+| `@earendil-works/pi-coding-agent` | PI Extension API types |
+| `@earendil-works/pi-agent-core` | Agent loop |
+| `@earendil-works/pi-ai` | AI provider abstraction |
 | `@sinclair/typebox` | JSON Schema for tool parameters |
 | `yaml` | YAML parsing (workflow config) |
 

@@ -24,9 +24,9 @@
   },
   "dependencies": {
     "@harness-kit/agent": "workspace:*",
-    "@mariozechner/pi-agent-core": "^0.73.1",
-    "@mariozechner/pi-ai": "catalog:",
-    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "@earendil-works/pi-agent-core": "^0.75.5",
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-coding-agent": "^0.75.5",
     "@sinclair/typebox": "catalog:",
     "pi-kimi-coder": "^1.1.0",
     "yaml": "^2.7.0"

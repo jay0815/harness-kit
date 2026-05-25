@@ -266,7 +266,7 @@ const isVague = input.length < 20 || lower === "help" || ...
 
 ### 现状
 
-agent runtime 深度依赖 `@mariozechner/pi-ai`：
+agent runtime 深度依赖 `@earendil-works/pi-ai`：
 - `StreamFn` 类型签名直接继承自 `streamSimple`
 - `AssistantMessage` 结构（`ToolCall.arguments` vs `input`）渗透到 agent-loop、event-bridge、所有测试 mock
 - `Model`、`Message`、`Tool`、`ToolResultMessage` 等核心类型全部来自 pi-ai

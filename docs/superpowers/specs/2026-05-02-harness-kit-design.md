@@ -48,7 +48,7 @@ PI (agent loop) → harness-kit (PI agent)
 
 | 组件 | 职责 | 技术选型 |
 |---|---|---|
-| **PI** | 最底层 agent loop，执行 harness-kit 的动作 | `@mariozechner/pi-agent-core` (~900 行) |
+| **PI** | 最底层 agent loop，执行 harness-kit 的动作 | `@earendil-works/pi-agent-core` (~900 行) |
 | **harness-kit** | PI agent，工具集 = 启动 pane + ACP + 校验 | TypeScript，PI Extension 或独立 agent |
 | **smux** | terminal multiplexer + 跨 pane 通信基础设施 | tmux + `tmux-bridge` CLI |
 | **ACP** | Agent Communication Protocol，聊天室消息传递 | 基于 tmux-bridge 的轻量协议 |

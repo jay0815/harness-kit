@@ -29,11 +29,11 @@ PI 是 npm workspace mono-repo，包含 5 个 packages：
 
 ```
 packages/
-  ai/           # @mariozechner/pi-ai — 统一多 Provider LLM API
-  agent/        # @mariozechner/pi-agent-core — Agent 运行时（工具调用+状态管理）
-  coding-agent/ # @mariozechner/pi-coding-agent — 交互式 coding agent CLI + SDK
-  tui/          # @mariozechner/pi-tui — 终端 UI 库（差分渲染）
-  web-ui/       # @mariozechner/pi-web-ui — Web 组件（AI 聊天界面）
+  ai/           # @earendil-works/pi-ai — 统一多 Provider LLM API
+  agent/        # @earendil-works/pi-agent-core — Agent 运行时（工具调用+状态管理）
+  coding-agent/ # @earendil-works/pi-coding-agent — 交互式 coding agent CLI + SDK
+  tui/          # @earendil-works/pi-tui — 终端 UI 库（差分渲染）
+  web-ui/       # @earendil-works/pi-web-ui — Web 组件（AI 聊天界面）
 ```
 
 **关键目录说明**：
@@ -117,8 +117,8 @@ AgentMessage[] → transformContext() → AgentMessage[] → convertToLlm() → 
 最小代码示例（直接使用 agent-core）：
 
 ```typescript
-import { Agent } from "@mariozechner/pi-agent-core";
-import { getModel } from "@mariozechner/pi-ai";
+import { Agent } from "@earendil-works/pi-agent-core";
+import { getModel } from "@earendil-works/pi-ai";
 
 const agent = new Agent({
   initialState: {
@@ -139,7 +139,7 @@ await agent.prompt("Hello!");
 通过 coding-agent SDK：
 
 ```typescript
-import { createAgentSession, SessionManager } from "@mariozechner/pi-coding-agent";
+import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),

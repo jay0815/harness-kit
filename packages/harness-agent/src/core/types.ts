@@ -9,9 +9,9 @@ import type {
   TextContent,
   Tool,
   ToolResultMessage,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
-export type { Model } from "@mariozechner/pi-ai";
+export type { Model } from "@earendil-works/pi-ai";
 import type { Static, TSchema } from "@sinclair/typebox";
 
 // ─── Stream Function ───────────────────────────────────────────────

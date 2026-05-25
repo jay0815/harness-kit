@@ -47,7 +47,7 @@ graph LR
 
 ```typescript
 // packages/coding-agent/src/core/messages.ts
-declare module "@mariozechner/pi-agent-core" {
+declare module "@earendil-works/pi-agent-core" {
   interface CustomAgentMessages {
     bashExecution: BashExecutionMessage;
     custom: CustomMessage;
@@ -226,11 +226,11 @@ graph LR
 const VIRTUAL_MODULES: Record<string, unknown> = {
   "typebox": _bundledTypebox,
   "@sinclair/typebox": _bundledTypebox,
-  "@mariozechner/pi-agent-core": _bundledPiAgentCore,
-  "@mariozechner/pi-tui": _bundledPiTui,
-  "@mariozechner/pi-ai": _bundledPiAi,
-  "@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
-  "@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+  "@earendil-works/pi-agent-core": _bundledPiAgentCore,
+  "@earendil-works/pi-tui": _bundledPiTui,
+  "@earendil-works/pi-ai": _bundledPiAi,
+  "@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+  "@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 };
 ```
 
@@ -423,11 +423,11 @@ function getSupportedThinkingLevels(model: Model<any>): ModelThinkingLevel[] {
 
 ```
 pi-mono v0.72.0
-├── @mariozechner/pi-ai@0.72.0
-├── @mariozechner/pi-agent-core@0.72.0
-├── @mariozechner/pi-coding-agent@0.72.0
-├── @mariozechner/pi-tui@0.72.0
-└── @mariozechner/pi-web-ui@0.72.0
+├── @earendil-works/pi-ai@0.72.0
+├── @earendil-works/pi-agent-core@0.72.0
+├── @earendil-works/pi-coding-agent@0.72.0
+├── @earendil-works/pi-tui@0.72.0
+└── @earendil-works/pi-web-ui@0.72.0
 ```
 
 ### 原因
@@ -454,8 +454,8 @@ pi-mono v0.72.0
 ```json
 {
   "dependencies": {
-    "@mariozechner/pi-agent-core": "workspace:*",
-    "@mariozechner/pi-ai": "workspace:*"
+    "@earendil-works/pi-agent-core": "workspace:*",
+    "@earendil-works/pi-ai": "workspace:*"
   }
 }
 ```

@@ -48,7 +48,7 @@ packages/harness-agent/
    }
    ```
 
-3. **streamFn 创建** — 使用 `getModel(provider, modelId)` 和 `streamSimple` 从 `@mariozechner/pi-ai`，包装为 StreamFn：
+3. **streamFn 创建** — 使用 `getModel(provider, modelId)` 和 `streamSimple` 从 `@earendil-works/pi-ai`，包装为 StreamFn：
    ```typescript
    const streamFn: StreamFn = (model, context, options) =>
      streamSimple(model, context, { ...options, apiKey });
@@ -204,10 +204,10 @@ messages.push({
 
 ### Step 6: `src/cli/config.ts` — 配置解析
 
-使用 `getModel`、`getModels`、`getProviders`、`getEnvApiKey` 从 `@mariozechner/pi-ai`：
+使用 `getModel`、`getModels`、`getProviders`、`getEnvApiKey` 从 `@earendil-works/pi-ai`：
 ```typescript
 import { resolve } from "node:path";
-import { getModel, getModels, getProviders, getEnvApiKey, streamSimple } from "@mariozechner/pi-ai";
+import { getModel, getModels, getProviders, getEnvApiKey, streamSimple } from "@earendil-works/pi-ai";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a CLI coding assistant. Answer based on actual context. Do not pretend to execute operations you haven't performed.";
@@ -494,7 +494,7 @@ try {
 | `packages/harness-agent/src/session/types.ts` | HarnessAgentSessionConfig、StreamFn、HarnessExtensionAPI |
 | `packages/harness-agent/src/session/harness-session.ts` | HarnessAgentSession 主类 |
 | `packages/core/src/index.ts` | harnessKitExtension 扩展函数 |
-| `packages/harness-agent/node_modules/@mariozechner/pi-ai/dist/stream.d.ts` | streamSimple 签名 |
+| `packages/harness-agent/node_modules/@earendil-works/pi-ai/dist/stream.d.ts` | streamSimple 签名 |
 | `packages/harness-agent/package.json` | 需修改：添加 bin、peerDeps |
 
 ## 验收标准

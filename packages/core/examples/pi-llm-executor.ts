@@ -1,5 +1,5 @@
-import { completeSimple } from "@mariozechner/pi-ai";
-import type { Model, Context } from "@mariozechner/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai";
+import type { Model, Context } from "@earendil-works/pi-ai";
 import type { LlmExecutor } from "../src/workflow-executor.js";
 import type { PhaseConfig } from "../src/workflow-schema.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";

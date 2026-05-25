@@ -23,7 +23,7 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "catalog:",
+    "@earendil-works/pi-ai": "catalog:",
     "@sinclair/typebox": "catalog:"
   },
   "devDependencies": {

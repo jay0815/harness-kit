@@ -4,7 +4,7 @@ packages:
 catalogMode: prefer
 
 catalog:
-  "@mariozechner/pi-ai": ^0.73.1
+  "@earendil-works/pi-ai": ^0.75.5
   "@sinclair/typebox": ^0.34.49
   "@types/node": ^22.19.19
   oxfmt: ^0.51.0
