@@ -5,10 +5,16 @@
     "build": "pnpm --filter @harness-kit/agent run build && pnpm --filter @harness-kit/core run build",
     "test": "pnpm -r --filter './packages/**' run test",
     "lint": "pnpm -r --filter './packages/**' run lint",
+    "lint:init": "oxlint --init",
+    "fmt:init": "oxfmt --init",
     "typecheck": "pnpm --filter @harness-kit/agent run typecheck && pnpm --filter @harness-kit/core run typecheck",
     "harness": "node packages/harness-agent/dist/cli.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0"
   }
 }

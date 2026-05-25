@@ -17,7 +17,10 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint src/"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
@@ -33,7 +36,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "oxlint": "^1.66.0",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }
