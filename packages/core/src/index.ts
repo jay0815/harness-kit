@@ -1,9 +1,9 @@
 import type { HarnessExtensionAPI } from "@harness-kit/agent";
+import { extractResultBlock, verifyFacts, FACT_VERIFICATION_KEY } from "@harness-kit/agent";
+import type { FactVerificationMetadata, ResultBlock } from "@harness-kit/agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
-import { extractResultBlock } from "./result-block.js";
-import { verifyFacts } from "./verify.js";
 import { reconcileFromDisk, initState, saveArtifact, saveState } from "./state.js";
 import { snapshotWorkspace, detectOutOfScope } from "./guardrails.js";
 import type { HarnessState } from "./types.js";
@@ -51,12 +51,57 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
     pi.registerTool(tool);
   }
 
+  // completeCurrentPhase — closure over harnessState, phaseSnapshot, workspaceDir
+  function completeCurrentPhase(block: ResultBlock): void {
+    if (!harnessState || harnessState.currentPhase >= harnessState.phases.length) {
+      return;
+    }
+
+    const phase = harnessState.phases[harnessState.currentPhase];
+
+    // Guardrails: check for out-of-scope file changes
+    if (phaseSnapshot) {
+      const afterSnapshot = snapshotWorkspace(workspaceDir);
+      const declaredFiles = block.facts.map((f) => f.file);
+      const outOfScope = detectOutOfScope(phaseSnapshot, afterSnapshot, declaredFiles);
+
+      if (outOfScope.length > 0) {
+        emit("guardrail", "out_of_scope", {
+          phase: harnessState.currentPhase,
+          phaseName: phase.name,
+          files: outOfScope,
+        });
+      }
+
+      phaseSnapshot = afterSnapshot;
+    }
+
+    try {
+      saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
+      phase.status = "completed";
+      phase.completedAt = new Date().toISOString();
+      harnessState.currentPhase++;
+      harnessState.updatedAt = new Date().toISOString();
+      saveState(harnessState, workspaceDir);
+      emit("state", "phase_completed", {
+        phase: harnessState.currentPhase - 1,
+        name: phase.name,
+      });
+    } catch (err) {
+      emit("state", "save_failed", {
+        phase: harnessState.currentPhase,
+        phaseName: phase.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Auto-verify: intercept LLM output, verify facts, inject failure feedback
   pi.on("turn_end", (event) => {
     const msg = event.message as { content?: unknown[] };
     if (!Array.isArray(msg.content)) return;
 
-    // Observability: extract LLM content types
+    // 1. Public observability (all paths)
     const content = msg.content as Array<{
       type: string;
       text?: string;
@@ -70,7 +115,6 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
     const text = textParts.map((c) => c.text ?? "").join("");
 
-    // Observability: turn summary — what the LLM did
     emit("turn", "end", {
       turnIndex: event.turnIndex,
       textLength: text.length,
@@ -80,9 +124,11 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       currentPhase: harnessState?.currentPhase,
     });
 
-    const block = extractResultBlock(text);
+    const agentMeta = (event as any).metadata?.[FACT_VERIFICATION_KEY] as
+      | FactVerificationMetadata
+      | undefined;
+    const block = agentMeta?.block ?? extractResultBlock(text);
 
-    // Observability: HK_RESULT parsing
     emit("hk_result", block ? "parsed" : "not_found", {
       hasBlock: !!block,
       factCount: block?.facts.length ?? 0,
@@ -93,21 +139,31 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       emit("hk_result", "warnings", { warnings: block.warnings });
     }
 
+    // 2. Metadata path — trust agent layer verification
+    if (agentMeta) {
+      emitVerificationTelemetryFromMetadata(agentMeta);
+
+      if (agentMeta.status === "pass" && agentMeta.block) {
+        completeCurrentPhase(agentMeta.block);
+      }
+      return;
+    }
+
+    // 3. Fallback path — bare mode or legacy agent
     if (!block || block.facts.length === 0) return;
 
     const t0 = Date.now();
     const report = verifyFacts(block.facts, workspaceDir);
     const durationMs = Date.now() - t0;
 
-    // Observability: auto-verify result
-    emit("auto_verify", report.overall.toLowerCase(), {
+    const outcome = report.overall === "PASS" ? "pass" : "fail";
+    emit("auto_verify", outcome, {
       factCount: block.facts.length,
       passCount: report.checks.filter((c) => c.status === "PASS").length,
       failCount: report.checks.filter((c) => c.status === "FAIL").length,
       durationMs,
     });
 
-    // Observability: verify failure details
     if (report.overall === "FAIL") {
       emit("verify_detail", "fail", {
         failures: report.checks
@@ -130,47 +186,49 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       pi.sendUserMessage(
         `[harness-kit auto-verify] FAIL:\n${failures}\nFix the incorrect facts and output a corrected <HK_RESULT> block.`,
       );
-    } else if (harnessState && harnessState.currentPhase < harnessState.phases.length) {
-      const phase = harnessState.phases[harnessState.currentPhase];
-
-      // Guardrails: check for out-of-scope file changes
-      if (phaseSnapshot) {
-        const afterSnapshot = snapshotWorkspace(workspaceDir);
-        const declaredFiles = block.facts.map((f) => f.file);
-        const outOfScope = detectOutOfScope(phaseSnapshot, afterSnapshot, declaredFiles);
-
-        if (outOfScope.length > 0) {
-          emit("guardrail", "out_of_scope", {
-            phase: harnessState.currentPhase,
-            phaseName: phase.name,
-            files: outOfScope,
-          });
-        }
-
-        // Update snapshot for next phase
-        phaseSnapshot = afterSnapshot;
-      }
-
-      try {
-        saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
-        phase.status = "completed";
-        phase.completedAt = new Date().toISOString();
-        harnessState.currentPhase++;
-        harnessState.updatedAt = new Date().toISOString();
-        saveState(harnessState, workspaceDir);
-        emit("state", "phase_completed", {
-          phase: harnessState.currentPhase - 1,
-          name: phase.name,
-        });
-      } catch (err) {
-        emit("state", "save_failed", {
-          phase: harnessState.currentPhase,
-          phaseName: phase.name,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      return;
     }
+
+    completeCurrentPhase(block);
   });
+
+  function emitVerificationTelemetryFromMetadata(meta: FactVerificationMetadata): void {
+    const factCount = meta.block?.facts.length ?? 0;
+
+    if (meta.report) {
+      const passCount = meta.report.checks.filter((c) => c.status === "PASS").length;
+      const failCount = meta.report.checks.filter((c) => c.status === "FAIL").length;
+      emit("auto_verify", meta.report.overall.toLowerCase(), {
+        factCount,
+        passCount,
+        failCount,
+        durationMs: 0,
+        source: "agent_metadata",
+      });
+      if (meta.report.overall === "FAIL") {
+        emit("verify_detail", "fail", {
+          failures: meta.report.checks
+            .filter((c) => c.status === "FAIL")
+            .map((c) => ({
+              file: c.fact.file,
+              lines: `${c.fact.startLine}-${c.fact.endLine}`,
+              reason: c.error ?? "text mismatch",
+            })),
+        });
+      }
+      return;
+    }
+
+    // missing / empty / fail without report
+    emit("auto_verify", meta.status === "pass" ? "pass" : "fail", {
+      status: meta.status,
+      factCount,
+      passCount: 0,
+      failCount: 0,
+      durationMs: 0,
+      source: "agent_metadata",
+    });
+  }
 
   // Inject harness-kit workflow instructions into system prompt
   pi.on("before_agent_start", (event) => {

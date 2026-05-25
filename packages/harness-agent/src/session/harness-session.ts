@@ -103,7 +103,12 @@ export class HarnessAgentSession {
         const pipeline = new MiddlewarePipeline();
         const emit = (event: AgentEvent) => this.handleEmit(event);
 
-        // 注册 FactVerificationMiddleware（session 默认 off，CLI 默认 strict）
+        // 注册用户提供的 middleware（实例注入，跨 prompt 复用，priority-sorted）
+        for (const mw of this.config.middlewares ?? []) {
+          pipeline.register(mw);
+        }
+
+        // 注册内置默认 middleware（每次 prompt 新建，retryCount prompt-scoped）
         const verifyMode = this.config.verifyMode ?? "off";
         if (verifyMode !== "off") {
           pipeline.register(

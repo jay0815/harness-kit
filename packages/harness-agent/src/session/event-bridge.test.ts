@@ -135,4 +135,32 @@ describe("bridgeAgentEvent", () => {
     const result = bridgeAgentEvent({ type: "unknown_event" } as any, 0);
     expect(result).toBeNull();
   });
+
+  it("bridges turn_end with metadata", () => {
+    const event = {
+      type: "turn_end",
+      message: { role: "assistant", content: [{ type: "text", text: "done" }] },
+      toolResults: [],
+      metadata: {
+        fact_verification: {
+          status: "pass",
+          block: null,
+          report: null,
+          timestamp: 123,
+        },
+      },
+    };
+    const result = bridgeAgentEvent(event as any, 0);
+    expect(result!.event.metadata).toEqual(event.metadata);
+  });
+
+  it("bridges turn_end without metadata (backward compatibility)", () => {
+    const event = {
+      type: "turn_end",
+      message: { role: "assistant", content: [{ type: "text", text: "done" }] },
+      toolResults: [],
+    };
+    const result = bridgeAgentEvent(event as any, 0);
+    expect(result!.event.metadata).toBeUndefined();
+  });
 });

@@ -122,6 +122,7 @@ export async function runAgentLoop(
         type: "turn_end",
         message: { role: "assistant", content: finalResponse.content } as any,
         toolResults: [],
+        metadata: { ...state.metadata },
       });
       break;
     }
@@ -148,6 +149,7 @@ export async function runAgentLoop(
       type: "turn_end",
       message: { role: "assistant", content: finalResponse.content } as any,
       toolResults: toolResults as any,
+      metadata: { ...state.metadata },
     });
 
     // Check shouldStopAfterTurn

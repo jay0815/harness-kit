@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { verifyFacts } from "./verify.js";
-import type { Fact } from "./types.js";
+import { verifyFacts } from "@harness-kit/agent";
+import type { Fact } from "@harness-kit/agent";
 
 function usage(): never {
   console.error(

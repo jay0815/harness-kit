@@ -22,14 +22,6 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
-  "peerDependencies": {
-    "@harness-kit/core": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@harness-kit/core": {
-      "optional": true
-    }
-  },
   "dependencies": {
     "@mariozechner/pi-ai": "catalog:",
     "@sinclair/typebox": "catalog:"
@@ -40,5 +32,13 @@
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@harness-kit/core": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@harness-kit/core": {
+      "optional": true
+    }
   }
 }

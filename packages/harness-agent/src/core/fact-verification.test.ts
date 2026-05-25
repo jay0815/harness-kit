@@ -279,4 +279,70 @@ describe("FactVerificationMiddleware", () => {
     // Should NOT say "no facts" — it's invalid, not empty
     expect((result as any).feedback).not.toContain("no facts");
   });
+
+  it("priority is finalizer (MAX_SAFE_INTEGER, runs after all other middleware)", () => {
+    const mw = new FactVerificationMiddleware(makeConfig("strict"));
+    expect(mw.priority).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("skips verification on tool-call response (stale metadata prevention)", async () => {
+    const mw = new FactVerificationMiddleware(makeConfig("strict"));
+    const state = makeState();
+
+    // Simulate QualityGate injecting a tool call into a text response
+    const toolCallResponse = {
+      content: [
+        { type: "text", text: "done" },
+        { type: "toolCall", id: "qg1", name: "__quality_gate__", input: {} } as any,
+      ],
+      stopReason: "end_turn",
+    };
+
+    const result = await mw.afterModel(state, toolCallResponse);
+    expect(result.action).toBe("accept");
+    // No metadata written — tool-call turn is skipped
+    expect(state.metadata[FACT_VERIFICATION_KEY]).toBeUndefined();
+  });
+
+  it("clears stale metadata from previous turn before processing", async () => {
+    const mw = new FactVerificationMiddleware(makeConfig("off"));
+    const state = makeState();
+
+    // Simulate stale metadata from a previous turn
+    state.metadata[FACT_VERIFICATION_KEY] = {
+      status: "pass",
+      block: { currentWork: "old", facts: [] },
+      report: null,
+      timestamp: 0,
+    };
+
+    // off mode — should clear stale metadata and accept
+    const result = await mw.afterModel(state, textResponse("just text"));
+    expect(result.action).toBe("accept");
+    // Stale metadata cleared
+    expect(state.metadata[FACT_VERIFICATION_KEY]).toBeUndefined();
+  });
+
+  it("clears stale metadata on tool-call turn", async () => {
+    const mw = new FactVerificationMiddleware(makeConfig("strict"));
+    const state = makeState();
+
+    // Stale pass metadata from previous text turn
+    state.metadata[FACT_VERIFICATION_KEY] = {
+      status: "pass",
+      block: { currentWork: "old", facts: [] },
+      report: null,
+      timestamp: 0,
+    };
+
+    const toolCallResponse = {
+      content: [{ type: "toolCall", id: "tc1", name: "read_file", input: {} } as any],
+      stopReason: "end_turn",
+    };
+
+    const result = await mw.afterModel(state, toolCallResponse);
+    expect(result.action).toBe("accept");
+    // Stale metadata cleared — tool-call turn doesn't carry old pass
+    expect(state.metadata[FACT_VERIFICATION_KEY]).toBeUndefined();
+  });
 });

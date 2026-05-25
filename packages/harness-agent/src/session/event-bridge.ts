@@ -51,6 +51,7 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
           turnIndex,
           message: bridgedMessage,
           toolResults: event.toolResults,
+          metadata: event.metadata,
         },
       };
     }

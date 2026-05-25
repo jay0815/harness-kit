@@ -675,4 +675,60 @@ describe("HarnessAgentSession", () => {
     // 1 initial + 1 retry = 2 calls
     expect(callCount).toBe(2);
   });
+
+  it("user middleware registered and executed by priority", async () => {
+    const order: string[] = [];
+    const streamFn = mockStreamFn("done");
+
+    const session = new HarnessAgentSession(
+      makeConfig({
+        streamFn,
+        middlewares: [
+          {
+            priority: 20,
+            name: "second",
+            beforeModel: async () => {
+              order.push("second");
+            },
+          },
+          {
+            priority: 10,
+            name: "first",
+            beforeModel: async () => {
+              order.push("first");
+            },
+          },
+        ],
+      }),
+    );
+
+    await session.start();
+    await session.prompt("hello");
+
+    expect(order).toEqual(["first", "second"]);
+  });
+
+  it("user middleware instance reused across prompts", async () => {
+    let callCount = 0;
+    const streamFn = mockStreamFn("done");
+
+    const trackingMiddleware = {
+      priority: 10,
+      name: "tracker",
+      beforeModel: async () => {
+        callCount++;
+      },
+    };
+
+    const session = new HarnessAgentSession(
+      makeConfig({ streamFn, middlewares: [trackingMiddleware] }),
+    );
+
+    await session.start();
+    await session.prompt("first");
+    await session.prompt("second");
+
+    // Same instance, called once per prompt
+    expect(callCount).toBe(2);
+  });
 });

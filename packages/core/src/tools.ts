@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import type { ToolDefinition } from "@harness-kit/agent";
-import type { Fact } from "./types.js";
+import { extractResultBlock, hasCompleteResultBlock, verifyFacts } from "@harness-kit/agent";
+import type { Fact } from "@harness-kit/agent";
 import {
   createPane,
   labelPane,
@@ -10,8 +11,6 @@ import {
   readPane,
   isPaneAlive,
 } from "./pane.js";
-import { extractResultBlock, hasCompleteResultBlock } from "./result-block.js";
-import { verifyFacts } from "./verify.js";
 import { emit } from "./telemetry.js";
 
 /** In-memory registry of panes managed by this harness-kit session */

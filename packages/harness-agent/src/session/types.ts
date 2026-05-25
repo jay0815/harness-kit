@@ -1,5 +1,11 @@
 import type { TSchema, Static } from "@sinclair/typebox";
-import type { AgentToolResult, AgentTool, Model, StreamFn } from "../core/types.js";
+import type {
+  AgentMiddleware,
+  AgentToolResult,
+  AgentTool,
+  Model,
+  StreamFn,
+} from "../core/types.js";
 
 /**
  * ToolDefinition — structurally compatible with PI's ToolDefinition.
@@ -67,4 +73,6 @@ export interface HarnessAgentSessionConfig {
   verifyMode?: "strict" | "warn" | "off";
   /** Max verification retry rounds. Default: 3 */
   maxVerificationRetries?: number;
+  /** User-supplied middleware instances. Reused across prompts; mutable state persists. */
+  middlewares?: AgentMiddleware[];
 }

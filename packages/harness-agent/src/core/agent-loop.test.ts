@@ -368,4 +368,83 @@ describe("runAgentLoop", () => {
     expect(toolResultMsg.timestamp).toBeDefined();
     expect(toolResultMsg.isError).toBe(false);
   });
+
+  it("turn_end carries metadata snapshot on pure text response", async () => {
+    const events: AgentEvent[] = [];
+    let stateMetadataRef: any = null;
+    const pipeline = new MiddlewarePipeline();
+
+    // Register a middleware that writes metadata and captures the reference
+    pipeline.register({
+      priority: 10,
+      name: "meta-writer",
+      afterModel: (state, response) => {
+        state.metadata["test_key"] = { value: "hello" };
+        stateMetadataRef = state.metadata;
+        return response;
+      },
+    });
+
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: mockStream({ content: [{ type: "text", text: "done" }] }),
+    };
+
+    await runAgentLoop(config, makeBudget(), pipeline, (e) => {
+      events.push(e);
+    });
+
+    const turnEnd = events.find((e) => e.type === "turn_end") as any;
+    expect(turnEnd).toBeDefined();
+    expect(turnEnd.metadata).toBeDefined();
+    expect(turnEnd.metadata.test_key).toEqual({ value: "hello" });
+
+    // Prove copy semantics: emitted metadata is NOT the same object as state.metadata
+    expect(turnEnd.metadata).not.toBe(stateMetadataRef);
+    // Mutating the emitted copy does not affect state.metadata
+    turnEnd.metadata.injected = true;
+    expect(stateMetadataRef.injected).toBeUndefined();
+  });
+
+  it("turn_end carries metadata snapshot after tool execution", async () => {
+    const events: AgentEvent[] = [];
+    const pipeline = new MiddlewarePipeline();
+
+    pipeline.register({
+      priority: 10,
+      name: "meta-writer",
+      afterModel: (_state, response) => {
+        _state.metadata["tool_run"] = true;
+        return response;
+      },
+    });
+
+    const tool = makeTool("read_file", async () => textResult("content"));
+
+    const config: AgentLoopConfig = {
+      model: "test-model" as any,
+      systemPrompt: "test",
+      messages: [],
+      tools: [tool],
+      contextWindow: 200_000,
+      streamFn: mockStream(
+        { content: [toolCallBlock("tc1", "read_file", { path: "/test" })] },
+        { content: [{ type: "text", text: "done" }] },
+      ),
+    };
+
+    await runAgentLoop(config, makeBudget(), pipeline, (e) => {
+      events.push(e);
+    });
+
+    const turnEnds = events.filter((e) => e.type === "turn_end") as any[];
+    // Second turn_end (after tool execution) should carry metadata
+    const lastTurnEnd = turnEnds[turnEnds.length - 1];
+    expect(lastTurnEnd.metadata).toBeDefined();
+    expect(lastTurnEnd.metadata.tool_run).toBe(true);
+  });
 });

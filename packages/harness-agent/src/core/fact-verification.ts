@@ -1,5 +1,4 @@
 import type { AgentMiddleware, AfterModelResult, LLMResponse, RuntimeState } from "./types.js";
-import { PRIORITY_EXTRACT } from "./types.js";
 import type { ResultBlock, VerifyReport } from "./verify-types.js";
 import { extractResultBlock } from "./result-block.js";
 import { verifyFacts } from "./verify.js";
@@ -22,7 +21,11 @@ export interface FactVerificationConfig {
 }
 
 export class FactVerificationMiddleware implements AgentMiddleware {
-  priority = PRIORITY_EXTRACT; // 90
+  // Finalizer: must run after all other afterModel middleware.
+  // If any middleware mutates response.content (e.g. QualityGate injects tool call),
+  // FactVerification sees the final state and skips verification on tool-call turns.
+  // Reserved: do not use priority >= MAX_SAFE_INTEGER for user middleware.
+  priority = Number.MAX_SAFE_INTEGER;
   name = "FactVerification";
   private retryCount = 0; // prompt scoped: 每次 prompt() 创建新实例
   private readonly maxRetries: number;
@@ -32,6 +35,9 @@ export class FactVerificationMiddleware implements AgentMiddleware {
   }
 
   async afterModel(state: RuntimeState, response: LLMResponse): Promise<AfterModelResult> {
+    // Clear stale metadata from previous turn before any checks
+    delete state.metadata[FACT_VERIFICATION_KEY];
+
     if (this.config.mode === "off") {
       return { action: "accept", response };
     }
