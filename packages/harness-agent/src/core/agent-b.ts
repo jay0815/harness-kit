@@ -70,9 +70,7 @@ export class AgentB {
     this.state.taskStatus = "running";
 
     const systemPrompt = this.buildSystemPrompt(task, context);
-    const initialMessages: AgentMessage[] = [
-      { role: "user", content: task } as any,
-    ];
+    const initialMessages: AgentMessage[] = [{ role: "user", content: task } as any];
 
     try {
       const result = await runAgentLoop(

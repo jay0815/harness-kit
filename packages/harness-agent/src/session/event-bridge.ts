@@ -43,9 +43,7 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
 
     case "turn_end": {
       const msg = event.message as any;
-      const bridgedMessage = msg
-        ? { ...msg, content: bridgeContentBlocks(msg.content) }
-        : msg;
+      const bridgedMessage = msg ? { ...msg, content: bridgeContentBlocks(msg.content) } : msg;
       return {
         type: "turn_end",
         event: {

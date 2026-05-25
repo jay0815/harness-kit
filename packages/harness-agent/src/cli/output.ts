@@ -2,10 +2,7 @@ export function turnStart(event: { turnIndex: number }): void {
   process.stdout.write(`\n── Turn ${event.turnIndex} ──\n`);
 }
 
-export function turnEnd(event: {
-  message?: { content?: any[] };
-  toolResults?: any[];
-}): void {
+export function turnEnd(event: { message?: { content?: any[] }; toolResults?: any[] }): void {
   const content = event.message?.content;
   if (!content || content.length === 0) {
     process.stdout.write("[empty response]\n");
@@ -24,10 +21,7 @@ export function turnEnd(event: {
   }
 }
 
-export function toolStart(event: {
-  toolName: string;
-  args?: any;
-}): void {
+export function toolStart(event: { toolName: string; args?: any }): void {
   const args = event.args ? JSON.stringify(event.args) : "";
   process.stdout.write(`  ⟶ ${event.toolName} ${args}\n`);
 }
@@ -40,10 +34,11 @@ export function toolEnd(event: {
   const isError = event.isError || event.result?.isError;
   const prefix = isError ? "  ✗ Error" : "  ✓";
 
-  const text = event.result?.content
-    ?.filter((c: any) => c.type === "text")
-    .map((c: any) => c.text)
-    .join("\n") ?? "";
+  const text =
+    event.result?.content
+      ?.filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join("\n") ?? "";
 
   if (text) {
     const truncated = text.length > 500 ? text.slice(0, 500) + "…" : text;

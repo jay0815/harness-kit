@@ -36,9 +36,7 @@ describe("output", () => {
     it("prints tool_use name and args", () => {
       output.turnEnd({
         message: {
-          content: [
-            { type: "tool_use", id: "tc1", name: "read_file", input: { path: "/test" } },
-          ],
+          content: [{ type: "tool_use", id: "tc1", name: "read_file", input: { path: "/test" } }],
         },
       } as any);
       const out = getOutput();

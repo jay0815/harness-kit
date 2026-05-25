@@ -3,7 +3,10 @@ import type { PaneInfo } from "./types.js";
 
 /** Error thrown when tmux operations fail */
 export class PaneError extends Error {
-  constructor(message: string, public readonly command: string) {
+  constructor(
+    message: string,
+    public readonly command: string,
+  ) {
     super(message);
     this.name = "PaneError";
   }
@@ -14,10 +17,7 @@ function tmux(args: string[]): string {
     return execFileSync("tmux", args, { encoding: "utf-8", timeout: 10000 }).trim();
   } catch (err) {
     const cmd = `tmux ${args.join(" ")}`;
-    throw new PaneError(
-      `tmux failed: ${err instanceof Error ? err.message : String(err)}`,
-      cmd,
-    );
+    throw new PaneError(`tmux failed: ${err instanceof Error ? err.message : String(err)}`, cmd);
   }
 }
 

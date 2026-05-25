@@ -53,7 +53,11 @@ export const startAgentTool: ToolDefinition<typeof startAgentSchema> = {
   parameters: startAgentSchema,
   execute: async (_toolCallId, params: StartAgentParams) => {
     const t0 = Date.now();
-    emit("tool_call", "start", { tool: "start_agent", role: params.role, executor: params.executor });
+    emit("tool_call", "start", {
+      tool: "start_agent",
+      role: params.role,
+      executor: params.executor,
+    });
     try {
       const paneId = createPane();
       labelPane(paneId, params.role);
@@ -139,18 +143,22 @@ export const acpSendTool: ToolDefinition<typeof acpSendSchema> = {
         ``,
         `OUTPUT FORMAT — You MUST wrap your response in a <HK_RESULT> block:`,
         `<HK_RESULT>`,
-        JSON.stringify({
-          currentWork: "describe what you did in this task",
-          facts: [
-            {
-              file: "relative/path/to/file.ts",
-              startLine: 1,
-              endLine: 3,
-              exactText: "exact text as it appears in the file",
-            },
-          ],
-          reasoning: "optional reasoning",
-        }, null, 2),
+        JSON.stringify(
+          {
+            currentWork: "describe what you did in this task",
+            facts: [
+              {
+                file: "relative/path/to/file.ts",
+                startLine: 1,
+                endLine: 3,
+                exactText: "exact text as it appears in the file",
+              },
+            ],
+            reasoning: "optional reasoning",
+          },
+          null,
+          2,
+        ),
         `</HK_RESULT>`,
         ``,
         `Required fields:`,
@@ -207,7 +215,11 @@ export const acpReadTool: ToolDefinition<typeof acpReadSchema> = {
       const result = extractResultBlock(output);
 
       if (result) {
-        emit("acp_msg", "read", { target: params.target, status: "COMPLETE", factCount: result.facts.length });
+        emit("acp_msg", "read", {
+          target: params.target,
+          status: "COMPLETE",
+          factCount: result.facts.length,
+        });
         return {
           content: [
             {

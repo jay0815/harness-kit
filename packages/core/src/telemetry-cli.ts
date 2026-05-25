@@ -66,7 +66,9 @@ function printSummary(events: TelemetryEvent[]): void {
     }
     for (const [name, stat] of byTool) {
       const avg = Math.round(stat.totalMs / stat.count);
-      console.log(`  ${name.padEnd(16)} ${stat.count} calls   avg ${formatDuration(avg)}   max ${formatDuration(stat.maxMs)}`);
+      console.log(
+        `  ${name.padEnd(16)} ${stat.count} calls   avg ${formatDuration(avg)}   max ${formatDuration(stat.maxMs)}`,
+      );
     }
   }
 
@@ -110,7 +112,9 @@ function printSummary(events: TelemetryEvent[]): void {
       totalFailed += Number(evt.data.failCount ?? 0);
     }
     const passRate = totalFacts > 0 ? ((totalPassed / totalFacts) * 100).toFixed(1) : "N/A";
-    console.log(`  total_facts: ${totalFacts}   passed: ${totalPassed}   failed: ${totalFailed}   pass_rate: ${passRate}%`);
+    console.log(
+      `  total_facts: ${totalFacts}   passed: ${totalPassed}   failed: ${totalFailed}   pass_rate: ${passRate}%`,
+    );
   }
 }
 
@@ -120,10 +124,10 @@ function printTimeline(events: TelemetryEvent[]): void {
   for (const evt of events) {
     const offset = new Date(evt.ts).getTime() - t0;
     const dur = evt.durationMs !== undefined ? ` (${formatDuration(evt.durationMs)})` : "";
-    const dataStr = Object.keys(evt.data).length > 0
-      ? " " + JSON.stringify(evt.data)
-      : "";
-    console.log(`  +${formatDuration(offset).padStart(8)}  ${evt.type}:${evt.action}${dur}${dataStr}`);
+    const dataStr = Object.keys(evt.data).length > 0 ? " " + JSON.stringify(evt.data) : "";
+    console.log(
+      `  +${formatDuration(offset).padStart(8)}  ${evt.type}:${evt.action}${dur}${dataStr}`,
+    );
   }
 }
 
@@ -149,7 +153,11 @@ function printErrors(events: TelemetryEvent[]): void {
 // Main
 const args = process.argv.slice(2);
 const filePath = args.find((a) => !a.startsWith("--"));
-const mode = args.includes("--timeline") ? "timeline" : args.includes("--errors") ? "errors" : "summary";
+const mode = args.includes("--timeline")
+  ? "timeline"
+  : args.includes("--errors")
+    ? "errors"
+    : "summary";
 
 if (!filePath) {
   console.error("Usage: harness-telemetry <jsonl-file> [--timeline|--errors]");

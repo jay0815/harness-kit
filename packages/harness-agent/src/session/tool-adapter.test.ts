@@ -10,7 +10,9 @@ function makeCtx(): HarnessExtensionContext {
 
 const testSchema = Type.Object({ path: Type.String() });
 
-function makeToolDef(overrides?: Partial<ToolDefinition<typeof testSchema>>): ToolDefinition<typeof testSchema> {
+function makeToolDef(
+  overrides?: Partial<ToolDefinition<typeof testSchema>>,
+): ToolDefinition<typeof testSchema> {
   return {
     name: "read_file",
     label: "Read File",
@@ -85,7 +87,9 @@ describe("adaptToolDefinition", () => {
 
   it("propagates errors", async () => {
     const toolDef = makeToolDef({
-      execute: async () => { throw new Error("boom"); },
+      execute: async () => {
+        throw new Error("boom");
+      },
     });
     const tool = adaptToolDefinition(toolDef, makeCtx);
 
@@ -95,13 +99,15 @@ describe("adaptToolDefinition", () => {
 
 describe("mergeTools", () => {
   it("includes base tools", () => {
-    const base: AgentTool[] = [{
-      name: "grep",
-      label: "Grep",
-      description: "Search",
-      parameters: {} as any,
-      execute: async () => ({ content: [], details: null }),
-    }];
+    const base: AgentTool[] = [
+      {
+        name: "grep",
+        label: "Grep",
+        description: "Search",
+        parameters: {} as any,
+        execute: async () => ({ content: [], details: null }),
+      },
+    ];
 
     const result = mergeTools(base, new Map(), makeCtx);
     expect(result).toHaveLength(1);
@@ -118,13 +124,18 @@ describe("mergeTools", () => {
   });
 
   it("registered overrides base with same name", () => {
-    const base: AgentTool[] = [{
-      name: "read_file",
-      label: "Original",
-      description: "Original",
-      parameters: {} as any,
-      execute: async () => ({ content: [{ type: "text" as const, text: "original" }], details: null }),
-    }];
+    const base: AgentTool[] = [
+      {
+        name: "read_file",
+        label: "Original",
+        description: "Original",
+        parameters: {} as any,
+        execute: async () => ({
+          content: [{ type: "text" as const, text: "original" }],
+          details: null,
+        }),
+      },
+    ];
 
     const registered = new Map<string, ToolDefinition>();
     registered.set("read_file", makeToolDef({ label: "Override" }));

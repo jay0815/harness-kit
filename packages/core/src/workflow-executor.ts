@@ -1,9 +1,4 @@
-import type {
-  WorkflowConfig,
-  PhaseConfig,
-  PhaseResult,
-  WorkflowRun,
-} from "./workflow-schema.js";
+import type { WorkflowConfig, PhaseConfig, PhaseResult, WorkflowRun } from "./workflow-schema.js";
 import { substituteTemplate } from "./workflow-loader.js";
 import { executeCode, type ExecuteCodeOptions } from "./code-executor.js";
 
@@ -23,9 +18,7 @@ export interface LlmExecutor {
   ): Promise<{ success: boolean; output: string }>;
 }
 
-export async function executeWorkflow(
-  options: WorkflowExecutorOptions,
-): Promise<WorkflowRun> {
+export async function executeWorkflow(options: WorkflowExecutorOptions): Promise<WorkflowRun> {
   const { config, workflowDir, env, timeoutMs, dryRun, llmExecutor } = options;
 
   const run: WorkflowRun = {
@@ -134,15 +127,10 @@ async function executePhase(
   }
 }
 
-function executePhaseDryRun(
-  phase: PhaseConfig,
-  outputs: Map<string, string>,
-): PhaseResult {
+function executePhaseDryRun(phase: PhaseConfig, outputs: Map<string, string>): PhaseResult {
   // In dry-run mode, we simulate execution
   if (phase.executor === "llm") {
-    const prompt = phase.prompt
-      ? substituteTemplate(phase.prompt, outputs)
-      : "(no prompt)";
+    const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
 
     return {
       phaseName: phase.name,

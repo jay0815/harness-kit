@@ -14,9 +14,7 @@ export function extractResultBlock(output: string): ResultBlock | null {
   const endIdx = output.indexOf(BLOCK_END, startIdx);
   if (endIdx === -1) return null;
 
-  const jsonStr = output
-    .slice(startIdx + BLOCK_START.length, endIdx)
-    .trim();
+  const jsonStr = output.slice(startIdx + BLOCK_START.length, endIdx).trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
@@ -55,7 +53,9 @@ function validateResultBlock(parsed: unknown): ResultBlock | null {
   };
 }
 
-function validateFact(f: unknown): { file: string; startLine: number; endLine: number; exactText: string } | null {
+function validateFact(
+  f: unknown,
+): { file: string; startLine: number; endLine: number; exactText: string } | null {
   if (typeof f !== "object" || f === null) return null;
   const fact = f as Record<string, unknown>;
 

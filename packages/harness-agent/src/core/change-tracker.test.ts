@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { ChangeTracker, hasUnverifiedChanges, isLastVerifyOk, getLastVerifyError, CHANGE_TRACKER_KEY } from "./change-tracker.js";
+import {
+  ChangeTracker,
+  hasUnverifiedChanges,
+  isLastVerifyOk,
+  getLastVerifyError,
+  CHANGE_TRACKER_KEY,
+} from "./change-tracker.js";
 import type { RuntimeState, AgentToolCall, AgentToolResult } from "./types.js";
 
 function makeState(): RuntimeState {
@@ -45,7 +51,12 @@ describe("ChangeTracker", () => {
 
   it("skips errored results", async () => {
     const state = makeState();
-    await tracker.afterTool(state, makeToolCall("write_file"), undefined, makeResult("error", true));
+    await tracker.afterTool(
+      state,
+      makeToolCall("write_file"),
+      undefined,
+      makeResult("error", true),
+    );
     expect(state.metadata[CHANGE_TRACKER_KEY]).toBeUndefined();
   });
 
@@ -64,7 +75,12 @@ describe("ChangeTracker", () => {
 
   it("tracks verify failure via isError flag", async () => {
     const state = makeState();
-    await tracker.afterTool(state, makeToolCall("verify"), undefined, makeResult("FAIL: test broken", true));
+    await tracker.afterTool(
+      state,
+      makeToolCall("verify"),
+      undefined,
+      makeResult("FAIL: test broken", true),
+    );
     // Verify failure updates lastVerifyOk/lastVerifyError but NOT verifiedGen
     expect(isLastVerifyOk(state)).toBe(false);
     expect(getLastVerifyError(state)).toContain("FAIL: test broken");
@@ -107,13 +123,23 @@ describe("helper functions", () => {
 
   it("hasUnverifiedChanges returns true when codeGen > verifiedGen", () => {
     const state = makeState();
-    state.metadata[CHANGE_TRACKER_KEY] = { codeGen: 2, verifiedGen: 1, lastVerifyOk: true, lastVerifyError: null };
+    state.metadata[CHANGE_TRACKER_KEY] = {
+      codeGen: 2,
+      verifiedGen: 1,
+      lastVerifyOk: true,
+      lastVerifyError: null,
+    };
     expect(hasUnverifiedChanges(state)).toBe(true);
   });
 
   it("hasUnverifiedChanges returns false when codeGen === verifiedGen", () => {
     const state = makeState();
-    state.metadata[CHANGE_TRACKER_KEY] = { codeGen: 2, verifiedGen: 2, lastVerifyOk: true, lastVerifyError: null };
+    state.metadata[CHANGE_TRACKER_KEY] = {
+      codeGen: 2,
+      verifiedGen: 2,
+      lastVerifyOk: true,
+      lastVerifyError: null,
+    };
     expect(hasUnverifiedChanges(state)).toBe(false);
   });
 

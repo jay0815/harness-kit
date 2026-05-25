@@ -78,7 +78,9 @@ describe("HarnessAgentSession REPL integration", () => {
 
   it("session rejects concurrent prompts", async () => {
     let resolveStream: () => void;
-    const blocker = new Promise<void>((r) => { resolveStream = r; });
+    const blocker = new Promise<void>((r) => {
+      resolveStream = r;
+    });
 
     const streamFn = vi.fn().mockImplementation(async () => {
       await blocker;
@@ -116,9 +118,7 @@ describe("HarnessAgentSession REPL integration", () => {
   it("events are dispatched for tool execution", async () => {
     const streamFn = vi.fn().mockImplementation(async () => ({
       result: async () => ({
-        content: [
-          { type: "tool_use", id: "tc1", name: "bash", input: { command: "ls" } },
-        ],
+        content: [{ type: "tool_use", id: "tc1", name: "bash", input: { command: "ls" } }],
         stopReason: "end_turn",
         usage: { input: 100, output: 50 },
       }),

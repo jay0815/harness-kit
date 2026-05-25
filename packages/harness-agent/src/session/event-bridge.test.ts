@@ -3,9 +3,7 @@ import { bridgeAgentEvent, bridgeContentBlocks } from "./event-bridge.js";
 
 describe("bridgeContentBlocks", () => {
   it("converts toolCall to tool_use", () => {
-    const input = [
-      { type: "toolCall", id: "tc1", name: "read_file", input: { path: "/test" } },
-    ];
+    const input = [{ type: "toolCall", id: "tc1", name: "read_file", input: { path: "/test" } }];
     const result = bridgeContentBlocks(input);
     expect(result).toEqual([
       { type: "tool_use", id: "tc1", name: "read_file", input: { path: "/test" } },
@@ -50,7 +48,13 @@ describe("bridgeContentBlocks", () => {
 
   it("prefers input over arguments when both present", () => {
     const input = [
-      { type: "toolCall", id: "tc1", name: "read_file", input: { path: "/a" }, arguments: { path: "/b" } },
+      {
+        type: "toolCall",
+        id: "tc1",
+        name: "read_file",
+        input: { path: "/a" },
+        arguments: { path: "/b" },
+      },
     ];
     const result = bridgeContentBlocks(input);
     expect(result[0].input).toEqual({ path: "/a" });

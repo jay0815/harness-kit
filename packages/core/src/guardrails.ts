@@ -34,7 +34,10 @@ function walkDir(root: string, dir: string, snapshot: WorkspaceSnapshot): void {
         const content = readFileSync(fullPath);
         const sha256 = createHash("sha256").update(content).digest("hex");
         // Use mtimeNs if available (Node 22+), otherwise convert from mtimeMs with better precision
-        const mtimeNs = 'mtimeNs' in st ? (st as { mtimeNs: bigint }).mtimeNs : BigInt(Math.round(st.mtimeMs * 1_000_000));
+        const mtimeNs =
+          "mtimeNs" in st
+            ? (st as { mtimeNs: bigint }).mtimeNs
+            : BigInt(Math.round(st.mtimeMs * 1_000_000));
         snapshot.set(relPath, { size: st.size, mtimeNs, sha256 });
       } catch {
         // skip unreadable files

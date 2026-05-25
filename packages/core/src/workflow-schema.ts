@@ -1,10 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 // Executor types
-export const ExecutorType = Type.Union([
-  Type.Literal("llm"),
-  Type.Literal("code"),
-]);
+export const ExecutorType = Type.Union([Type.Literal("llm"), Type.Literal("code")]);
 export type ExecutorType = Static<typeof ExecutorType>;
 
 // Code execution: shell command or script reference

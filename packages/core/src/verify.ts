@@ -76,7 +76,7 @@ function verifyOneFact(fact: Fact, workspaceDir: string): VerifyCheck {
   const normalizedContent = content.replace(/\r\n/g, "\n");
   const lines = normalizedContent.split("\n");
   const startIdx = fact.startLine - 1; // 1-indexed -> 0-indexed
-  const endIdx = fact.endLine;         // exclusive
+  const endIdx = fact.endLine; // exclusive
 
   if (startIdx < 0 || startIdx >= lines.length) {
     return {

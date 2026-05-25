@@ -21,7 +21,9 @@ function loadKimiToken(): KimiToken | null {
   try {
     if (!existsSync(KIMI_CREDENTIALS_PATH)) return null;
     return JSON.parse(readFileSync(KIMI_CREDENTIALS_PATH, "utf-8"));
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function saveKimiToken(token: KimiToken): void {
@@ -39,8 +41,9 @@ async function refreshKimiToken(refreshToken: string): Promise<KimiToken> {
       refresh_token: refreshToken,
     }),
   });
-  const data = await response.json() as any;
-  if (!response.ok) throw new Error(data.error_description || `Refresh failed (${response.status})`);
+  const data = (await response.json()) as any;
+  if (!response.ok)
+    throw new Error(data.error_description || `Refresh failed (${response.status})`);
   return {
     access_token: data.access_token,
     refresh_token: data.refresh_token ?? refreshToken,
@@ -125,15 +128,11 @@ export function createPiLlmExecutor(options: PiLlmExecutorOptions = {}): LlmExec
         };
       }
 
-      const userContent = buildContext
-        ? buildContext(phase, context.previousResults)
-        : prompt;
+      const userContent = buildContext ? buildContext(phase, context.previousResults) : prompt;
 
       const messages: Context = {
         systemPrompt,
-        messages: [
-          { role: "user", content: userContent, timestamp: Date.now() },
-        ],
+        messages: [{ role: "user", content: userContent, timestamp: Date.now() }],
       };
 
       console.log(`  [PI] Calling ${model.id}...`);
@@ -147,12 +146,13 @@ export function createPiLlmExecutor(options: PiLlmExecutorOptions = {}): LlmExec
         });
 
         console.log(`  [PI] Done. Stop: ${response.stopReason}, items: ${response.content.length}`);
-        console.log(`  [PI] Content types: ${response.content.map(c => c.type).join(", ")}`);
+        console.log(`  [PI] Content types: ${response.content.map((c) => c.type).join(", ")}`);
 
         const textParts = response.content.filter((c) => c.type === "text");
         const thinkingParts = response.content.filter((c) => c.type === "thinking");
-        const output = textParts.map((c) => c.text).join("\n")
-          || thinkingParts.map((c) => c.thinking).join("\n");
+        const output =
+          textParts.map((c) => c.text).join("\n") ||
+          thinkingParts.map((c) => c.thinking).join("\n");
 
         return { success: true, output: output || "(No text content in response)" };
       } catch (err) {

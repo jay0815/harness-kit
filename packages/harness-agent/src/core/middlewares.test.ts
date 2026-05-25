@@ -33,7 +33,12 @@ describe("VerificationGuidanceMiddleware", () => {
   });
 
   it("appends success guidance after passing verify", async () => {
-    const state = makeState({ codeGen: 1, verifiedGen: 1, lastVerifyOk: true, lastVerifyError: null });
+    const state = makeState({
+      codeGen: 1,
+      verifiedGen: 1,
+      lastVerifyOk: true,
+      lastVerifyError: null,
+    });
     const result = makeResult("PASS");
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
@@ -42,7 +47,12 @@ describe("VerificationGuidanceMiddleware", () => {
   });
 
   it("appends failure guidance after failing verify", async () => {
-    const state = makeState({ codeGen: 1, verifiedGen: 0, lastVerifyOk: false, lastVerifyError: "test broken" });
+    const state = makeState({
+      codeGen: 1,
+      verifiedGen: 0,
+      lastVerifyOk: false,
+      lastVerifyError: "test broken",
+    });
     const result = makeResult("FAIL");
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
@@ -79,7 +89,11 @@ describe("ToolCallGuardrailMiddleware", () => {
 
     // Simulate 5 failures (isError: true)
     for (let i = 0; i < 5; i++) {
-      const failResult = { content: [{ type: "text" as const, text: "error" }], details: null, isError: true };
+      const failResult = {
+        content: [{ type: "text" as const, text: "error" }],
+        details: null,
+        isError: true,
+      };
       await mw.afterTool(state, makeToolCall("bash"), undefined, failResult);
     }
 
@@ -95,7 +109,11 @@ describe("ToolCallGuardrailMiddleware", () => {
 
     // Fail 3 times
     for (let i = 0; i < 3; i++) {
-      const failResult = { content: [{ type: "text" as const, text: "error" }], details: null, isError: true };
+      const failResult = {
+        content: [{ type: "text" as const, text: "error" }],
+        details: null,
+        isError: true,
+      };
       await mw.afterTool(state, makeToolCall("bash"), undefined, failResult);
     }
 
@@ -113,7 +131,11 @@ describe("ToolCallGuardrailMiddleware", () => {
     const state = makeState();
 
     for (let i = 0; i < 5; i++) {
-      const failResult = { content: [{ type: "text" as const, text: "error" }], details: null, isError: true };
+      const failResult = {
+        content: [{ type: "text" as const, text: "error" }],
+        details: null,
+        isError: true,
+      };
       await mw.afterTool(state, makeToolCall("bash"), undefined, failResult);
     }
 
@@ -140,7 +162,12 @@ describe("QualityGateMiddleware", () => {
 
   it("injects synthetic tool call when unverified changes exist", async () => {
     const mw = new QualityGateMiddleware();
-    const state = makeState({ codeGen: 2, verifiedGen: 1, lastVerifyOk: false, lastVerifyError: null });
+    const state = makeState({
+      codeGen: 2,
+      verifiedGen: 1,
+      lastVerifyOk: false,
+      lastVerifyError: null,
+    });
     const response: LLMResponse = { content: [], stopReason: "end_turn" };
 
     const out = await mw.afterModel(state, response);
@@ -160,7 +187,12 @@ describe("QualityGateMiddleware", () => {
 
   it("does not inject twice (sentFeedback flag)", async () => {
     const mw = new QualityGateMiddleware();
-    const state = makeState({ codeGen: 2, verifiedGen: 1, lastVerifyOk: false, lastVerifyError: null });
+    const state = makeState({
+      codeGen: 2,
+      verifiedGen: 1,
+      lastVerifyOk: false,
+      lastVerifyError: null,
+    });
     const response: LLMResponse = { content: [], stopReason: "end_turn" };
 
     await mw.afterModel(state, response);

@@ -1,9 +1,6 @@
 import readline from "node:readline";
 import { HarnessAgentSession } from "../session/harness-session.js";
-import type {
-  HarnessAgentSessionConfig,
-  HarnessExtensionAPI,
-} from "../session/types.js";
+import type { HarnessAgentSessionConfig, HarnessExtensionAPI } from "../session/types.js";
 import * as output from "./output.js";
 
 export interface REPLOptions {
@@ -68,9 +65,7 @@ export async function startREPL(
       } catch (err: unknown) {
         const code = (err as { code?: string }).code;
         if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
-          console.log(
-            "[harness-agent] @harness-kit/core not available, running in bare mode",
-          );
+          console.log("[harness-agent] @harness-kit/core not available, running in bare mode");
         } else {
           console.error(
             `[harness-agent] Failed to load @harness-kit/core: ${err instanceof Error ? err.message : String(err)}`,
@@ -124,9 +119,7 @@ export async function startREPL(
       try {
         await session.prompt(trimmed);
       } catch (err) {
-        console.error(
-          `\nError: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        console.error(`\nError: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         busy = false;
         rl.prompt();

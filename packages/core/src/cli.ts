@@ -4,7 +4,9 @@ import { verifyFacts } from "./verify.js";
 import type { Fact } from "./types.js";
 
 function usage(): never {
-  console.error("Usage: harness-verify --input <facts.json> [--workspace <dir>] [--output <report.json>]");
+  console.error(
+    "Usage: harness-verify --input <facts.json> [--workspace <dir>] [--output <report.json>]",
+  );
   process.exit(1);
 }
 

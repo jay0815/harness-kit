@@ -10,7 +10,13 @@ const testWorkflow: Workflow = {
   description: "test workflow",
   phases: [
     { name: "design", executor: "self", prompt: "design", contextFiles: [], humanConfirm: false },
-    { name: "implement", executor: "self", prompt: "implement", contextFiles: [], humanConfirm: false },
+    {
+      name: "implement",
+      executor: "self",
+      prompt: "implement",
+      contextFiles: [],
+      humanConfirm: false,
+    },
   ],
 };
 

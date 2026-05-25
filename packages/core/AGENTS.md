@@ -25,17 +25,17 @@ PI Agent (harness-kit extension)
 
 ## Key Files
 
-| File | Responsibility |
-|------|---------------|
-| `src/index.ts` | Extension entry, system prompt injection |
-| `src/tools.ts` | 4 PI tool definitions |
-| `src/pane.ts` | Tmux pane lifecycle |
-| `src/result-block.ts` | Parse `<HK_RESULT>` JSON blocks |
-| `src/verify.ts` | Hard fact verification |
-| `src/workflow.ts` | Hardcoded 3-phase workflow |
-| `src/cli.ts` | Standalone `harness-verify` CLI |
-| `src/telemetry.ts` | JSONL event recording |
-| `src/telemetry-cli.ts` | Telemetry analysis CLI |
+| File                   | Responsibility                           |
+| ---------------------- | ---------------------------------------- |
+| `src/index.ts`         | Extension entry, system prompt injection |
+| `src/tools.ts`         | 4 PI tool definitions                    |
+| `src/pane.ts`          | Tmux pane lifecycle                      |
+| `src/result-block.ts`  | Parse `<HK_RESULT>` JSON blocks          |
+| `src/verify.ts`        | Hard fact verification                   |
+| `src/workflow.ts`      | Hardcoded 3-phase workflow               |
+| `src/cli.ts`           | Standalone `harness-verify` CLI          |
+| `src/telemetry.ts`     | JSONL event recording                    |
+| `src/telemetry-cli.ts` | Telemetry analysis CLI                   |
 
 ## Agent Output Contract
 

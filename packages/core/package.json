@@ -2,13 +2,13 @@
   "name": "@harness-kit/core",
   "version": "0.1.0",
   "description": "Coding agent harness - orchestrates multi-agent workflows with hard fact verification",
+  "bin": {
+    "harness-telemetry": "bin/harness-telemetry",
+    "harness-verify": "bin/harness-verify"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "harness-verify": "bin/harness-verify",
-    "harness-telemetry": "bin/harness-telemetry"
-  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -24,9 +24,9 @@
   },
   "dependencies": {
     "@harness-kit/agent": "workspace:*",
-    "@mariozechner/pi-coding-agent": "^0.73.1",
     "@mariozechner/pi-agent-core": "^0.73.1",
     "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
     "@sinclair/typebox": "^0.34.0",
     "pi-kimi-coder": "^1.1.0",
     "yaml": "^2.7.0"

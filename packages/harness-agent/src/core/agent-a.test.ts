@@ -51,9 +51,7 @@ describe("AgentA", () => {
     const result = await agent.processHumanMessage("help", emit);
 
     expect(result).toContain("details");
-    expect(emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "agent_a_clarification" }),
-    );
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: "agent_a_clarification" }));
   });
 
   it("assesses question as not needing Agent B", async () => {
@@ -69,9 +67,7 @@ describe("AgentA", () => {
 
     // Questions return the assessment overview, not delegated to Agent B
     expect(result).toBeTruthy();
-    expect(emit).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "agent_b_start" }),
-    );
+    expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: "agent_b_start" }));
   });
 
   it("assesses task as needing Agent B", async () => {
@@ -86,9 +82,7 @@ describe("AgentA", () => {
     const emit = vi.fn();
     await agent.processHumanMessage("Implement a new feature for user auth", emit);
 
-    expect(emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "agent_a_assessment" }),
-    );
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: "agent_a_assessment" }));
   });
 
   it("delegates to Agent B with injected streamFn", async () => {
@@ -107,12 +101,8 @@ describe("AgentA", () => {
     expect(streamFn).toHaveBeenCalledTimes(1);
     expect(result).toContain("ok");
 
-    expect(emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "agent_b_start" }),
-    );
-    expect(emit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "agent_b_complete" }),
-    );
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: "agent_b_start" }));
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: "agent_b_complete" }));
 
     const state = agent.getState();
     expect(state.taskResults).toHaveLength(1);

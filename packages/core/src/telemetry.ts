@@ -32,7 +32,12 @@ export function initTelemetry(outputPath?: string): string {
   return sessionId;
 }
 
-export function emit(type: string, action: string, data: Record<string, unknown>, durationMs?: number): void {
+export function emit(
+  type: string,
+  action: string,
+  data: Record<string, unknown>,
+  durationMs?: number,
+): void {
   if (fd === null) return;
   const event: TelemetryEvent = {
     ts: new Date().toISOString(),

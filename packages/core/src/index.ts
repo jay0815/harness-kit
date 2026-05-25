@@ -57,7 +57,13 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
     if (!Array.isArray(msg.content)) return;
 
     // Observability: extract LLM content types
-    const content = msg.content as Array<{ type: string; text?: string; name?: string; input?: unknown; thinking?: string }>;
+    const content = msg.content as Array<{
+      type: string;
+      text?: string;
+      name?: string;
+      input?: unknown;
+      thinking?: string;
+    }>;
     const textParts = content.filter((c) => c.type === "text");
     const thinkingParts = content.filter((c) => c.type === "thinking");
     const toolCalls = content.filter((c) => c.type === "tool_use");
@@ -152,7 +158,10 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
         harnessState.currentPhase++;
         harnessState.updatedAt = new Date().toISOString();
         saveState(harnessState, workspaceDir);
-        emit("state", "phase_completed", { phase: harnessState.currentPhase - 1, name: phase.name });
+        emit("state", "phase_completed", {
+          phase: harnessState.currentPhase - 1,
+          name: phase.name,
+        });
       } catch (err) {
         emit("state", "save_failed", {
           phase: harnessState.currentPhase,

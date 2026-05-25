@@ -71,7 +71,9 @@ export async function executeCode(options: ExecuteCodeOptions): Promise<PhaseRes
       phaseName: phase.name,
       executor: "code",
       success: false,
-      output: [stdout, stderr].filter(Boolean).join("\n") || `Exit code: ${execErr?.status ?? "unknown"}: ${fallback}`,
+      output:
+        [stdout, stderr].filter(Boolean).join("\n") ||
+        `Exit code: ${execErr?.status ?? "unknown"}: ${fallback}`,
       durationMs: Date.now() - startTime,
     };
   }

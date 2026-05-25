@@ -6,7 +6,10 @@ import type { WorkflowConfig } from "./workflow-schema.js";
 import { WorkflowConfig as WorkflowConfigSchema } from "./workflow-schema.js";
 
 export class WorkflowLoadError extends Error {
-  constructor(message: string, public readonly details?: unknown) {
+  constructor(
+    message: string,
+    public readonly details?: unknown,
+  ) {
     super(message);
     this.name = "WorkflowLoadError";
   }
@@ -54,9 +57,7 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
     // Validate executor-specific fields
     if (phase.executor === "llm") {
       if (!phase.prompt) {
-        throw new WorkflowLoadError(
-          `Phase "${phase.name}": executor "llm" requires "prompt"`,
-        );
+        throw new WorkflowLoadError(`Phase "${phase.name}": executor "llm" requires "prompt"`);
       }
     } else if (phase.executor === "code") {
       if (!phase.command && !phase.script) {
@@ -73,9 +74,7 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
       if (phase.script) {
         const scriptPath = resolve(baseDir, phase.script);
         if (!existsSync(scriptPath)) {
-          throw new WorkflowLoadError(
-            `Phase "${phase.name}": script not found: ${scriptPath}`,
-          );
+          throw new WorkflowLoadError(`Phase "${phase.name}": script not found: ${scriptPath}`);
         }
       }
     }
@@ -83,10 +82,7 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
 }
 
 // Template substitution: {{phaseName.output}} → actual output
-export function substituteTemplate(
-  template: string,
-  results: Map<string, string>,
-): string {
+export function substituteTemplate(template: string, results: Map<string, string>): string {
   // Allow hyphens in phase names: {{check-env.output}}
   return template.replace(/\{\{([\w-]+)\.output\}\}/g, (_match, phaseName) => {
     const output = results.get(phaseName);
