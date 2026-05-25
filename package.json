@@ -5,7 +5,10 @@
     "build": "pnpm --filter @harness-kit/agent run build && pnpm --filter @harness-kit/core run build",
     "test": "pnpm -r --filter './packages/**' run test",
     "lint": "pnpm -r --filter './packages/**' run lint",
+    "lint:fix": "pnpm -r --filter './packages/**' run lint:fix",
     "lint:init": "oxlint --init",
+    "fmt": "pnpm -r --filter './packages/**' run fmt",
+    "fmt:check": "pnpm -r --filter './packages/**' run fmt:check",
     "fmt:init": "oxfmt --init",
     "typecheck": "pnpm --filter @harness-kit/agent run typecheck && pnpm --filter @harness-kit/core run typecheck",
     "harness": "node packages/harness-agent/dist/cli.js"
