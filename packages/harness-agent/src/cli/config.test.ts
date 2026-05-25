@@ -9,6 +9,7 @@ function makeArgs(overrides?: Partial<ParsedArgs>): ParsedArgs {
     workspace: "/tmp/test",
     systemPrompt: undefined,
     maxIterations: undefined,
+    verify: undefined,
     noExtension: false,
     help: false,
     version: false,
@@ -72,7 +73,9 @@ describe("resolveConfig", () => {
 
   it("throws when openai API key is missing", () => {
     delete process.env.OPENAI_API_KEY;
-    expect(() => resolveConfig(makeArgs({ provider: "openai", model: "gpt-4o" }))).toThrow(/No API key/);
+    expect(() => resolveConfig(makeArgs({ provider: "openai", model: "gpt-4o" }))).toThrow(
+      /No API key/,
+    );
   });
 
   it("creates streamFn that is a function", () => {
@@ -86,5 +89,24 @@ describe("resolveConfig", () => {
     const config = resolveConfig(makeArgs());
     expect(config.model).toBeDefined();
     expect((config.model as any).id).toBeDefined();
+  });
+
+  it("defaults verifyMode to strict when not provided", () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const config = resolveConfig(makeArgs());
+    expect(config.verifyMode).toBe("strict");
+  });
+
+  it("passes verify mode from args", () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const config = resolveConfig(makeArgs({ verify: "warn" }));
+    expect(config.verifyMode).toBe("warn");
+  });
+
+  it("verify off does not affect noExtension", () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const config = resolveConfig(makeArgs({ verify: "off" }));
+    expect(config.verifyMode).toBe("off");
+    // noExtension is a separate ParsedArgs field, not affected by verify
   });
 });

@@ -9,6 +9,7 @@ describe("parseArgs", () => {
     expect(args.workspace).toBe(process.cwd());
     expect(args.systemPrompt).toBeUndefined();
     expect(args.maxIterations).toBeUndefined();
+    expect(args.verify).toBeUndefined();
     expect(args.noExtension).toBe(false);
     expect(args.help).toBe(false);
     expect(args.version).toBe(false);
@@ -56,10 +57,14 @@ describe("parseArgs", () => {
 
   it("parses combined args", () => {
     const args = parseArgs([
-      "--provider", "openai",
-      "--model", "gpt-4o",
-      "--workspace", "/tmp",
-      "--max-iterations", "3",
+      "--provider",
+      "openai",
+      "--model",
+      "gpt-4o",
+      "--workspace",
+      "/tmp",
+      "--max-iterations",
+      "3",
       "--no-extension",
     ]);
     expect(args.provider).toBe("openai");
@@ -100,5 +105,29 @@ describe("parseArgs", () => {
     const args = parseArgs(["--", "--provider", "openai", "--model", "gpt-4o"]);
     expect(args.provider).toBe("openai");
     expect(args.model).toBe("gpt-4o");
+  });
+
+  it("parses --verify strict", () => {
+    const args = parseArgs(["--verify", "strict"]);
+    expect(args.verify).toBe("strict");
+  });
+
+  it("parses --verify warn", () => {
+    const args = parseArgs(["--verify", "warn"]);
+    expect(args.verify).toBe("warn");
+  });
+
+  it("parses --verify off", () => {
+    const args = parseArgs(["--verify", "off"]);
+    expect(args.verify).toBe("off");
+  });
+
+  it("throws on invalid --verify value", () => {
+    expect(() => parseArgs(["--verify", "invalid"])).toThrow(/must be one of: strict, warn, off/);
+  });
+
+  it("verify defaults to undefined when not provided", () => {
+    const args = parseArgs([]);
+    expect(args.verify).toBeUndefined();
   });
 });

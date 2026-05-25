@@ -3,6 +3,7 @@ import type {
   AgentTool,
   AgentToolCall,
   AgentToolResult,
+  AfterModelResult,
   LLMResponse,
   RuntimeState,
 } from "./types.js";
@@ -27,14 +28,24 @@ export class MiddlewarePipeline {
     }
   }
 
-  async runAfterModel(state: RuntimeState, response: LLMResponse): Promise<LLMResponse> {
-    let current = response;
+  async runAfterModel(state: RuntimeState, response: LLMResponse): Promise<AfterModelResult> {
+    let currentResponse = response;
+
     for (const mw of this.middlewares) {
-      if (mw.afterModel) {
-        current = await mw.afterModel(state, current);
+      if (!mw.afterModel) continue;
+
+      const result = await mw.afterModel(state, currentResponse);
+
+      // normalize: 旧 middleware 返回 LLMResponse，新返回 AfterModelResult
+      if (result && typeof result === "object" && "action" in result) {
+        if (result.action !== "accept") return result; // short-circuit retry/fail
+        currentResponse = result.response;
+      } else {
+        currentResponse = result as LLMResponse;
       }
     }
-    return current;
+
+    return { action: "accept", response: currentResponse };
   }
 
   async runBeforeTool(

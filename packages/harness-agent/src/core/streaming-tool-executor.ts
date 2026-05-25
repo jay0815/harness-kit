@@ -1,9 +1,4 @@
-import type {
-  AgentTool,
-  AgentToolCall,
-  AgentToolResult,
-  ToolExecutionMode,
-} from "./types.js";
+import type { AgentTool, AgentToolCall, AgentToolResult, ToolExecutionMode } from "./types.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import type { RuntimeState } from "./types.js";
 
@@ -24,7 +19,7 @@ const DEFAULT_MAX_CONCURRENCY = 8;
 const PARALLEL_SAFE_TOOLS = new Set(["read_file", "grep", "glob", "search", "list_files"]);
 
 // Tools that must always run sequentially
-const NEVER_PARALLEL_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
+const _NEVER_PARALLEL_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
 
 export class StreamingToolExecutor {
   private config: ToolExecutorConfig;
@@ -131,7 +126,12 @@ export class StreamingToolExecutor {
       result = await tool.execute(toolCall.id, args);
     } catch (err) {
       result = {
-        content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
         details: null,
         isError: true,
       };

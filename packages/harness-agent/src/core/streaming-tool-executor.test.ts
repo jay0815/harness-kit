@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { StreamingToolExecutor } from "./streaming-tool-executor.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import type { AgentTool, AgentToolCall, RuntimeState } from "./types.js";
@@ -16,7 +16,10 @@ function makeToolCall(id: string, name: string): AgentToolCall {
   return { id, name, type: "toolCall" } as any;
 }
 
-function makeTool(name: string, handler?: (id: string, params: unknown) => Promise<any>): AgentTool<any> {
+function makeTool(
+  name: string,
+  handler?: (id: string, params: unknown) => Promise<any>,
+): AgentTool<any> {
   return {
     name,
     label: name,
@@ -33,8 +36,18 @@ describe("StreamingToolExecutor", () => {
     const order: string[] = [];
 
     const tools = [
-      makeTool("a", async () => { order.push("a-start"); await delay(10); order.push("a-end"); return { content: [], details: null }; }),
-      makeTool("b", async () => { order.push("b-start"); await delay(10); order.push("b-end"); return { content: [], details: null }; }),
+      makeTool("a", async () => {
+        order.push("a-start");
+        await delay(10);
+        order.push("a-end");
+        return { content: [], details: null };
+      }),
+      makeTool("b", async () => {
+        order.push("b-start");
+        await delay(10);
+        order.push("b-end");
+        return { content: [], details: null };
+      }),
     ];
 
     const calls = [makeToolCall("1", "a"), makeToolCall("2", "b")];
@@ -50,8 +63,18 @@ describe("StreamingToolExecutor", () => {
     const order: string[] = [];
 
     const tools = [
-      makeTool("read_file", async () => { order.push("read-start"); await delay(10); order.push("read-end"); return { content: [], details: null }; }),
-      makeTool("grep", async () => { order.push("grep-start"); await delay(10); order.push("grep-end"); return { content: [], details: null }; }),
+      makeTool("read_file", async () => {
+        order.push("read-start");
+        await delay(10);
+        order.push("read-end");
+        return { content: [], details: null };
+      }),
+      makeTool("grep", async () => {
+        order.push("grep-start");
+        await delay(10);
+        order.push("grep-end");
+        return { content: [], details: null };
+      }),
     ];
 
     const calls = [makeToolCall("1", "read_file"), makeToolCall("2", "grep")];
@@ -68,8 +91,18 @@ describe("StreamingToolExecutor", () => {
     const order: string[] = [];
 
     const tools = [
-      makeTool("write_file", async () => { order.push("write-start"); await delay(10); order.push("write-end"); return { content: [], details: null }; }),
-      makeTool("edit_file", async () => { order.push("edit-start"); await delay(10); order.push("edit-end"); return { content: [], details: null }; }),
+      makeTool("write_file", async () => {
+        order.push("write-start");
+        await delay(10);
+        order.push("write-end");
+        return { content: [], details: null };
+      }),
+      makeTool("edit_file", async () => {
+        order.push("edit-start");
+        await delay(10);
+        order.push("edit-end");
+        return { content: [], details: null };
+      }),
     ];
 
     const calls = [makeToolCall("1", "write_file"), makeToolCall("2", "edit_file")];
@@ -85,8 +118,14 @@ describe("StreamingToolExecutor", () => {
     const order: string[] = [];
 
     const tools = [
-      makeTool("write_file", async () => { order.push("write"); return { content: [], details: null }; }),
-      makeTool("read_file", async () => { order.push("read"); return { content: [], details: null }; }),
+      makeTool("write_file", async () => {
+        order.push("write");
+        return { content: [], details: null };
+      }),
+      makeTool("read_file", async () => {
+        order.push("read");
+        return { content: [], details: null };
+      }),
     ];
 
     // write_file first, then read_file — order must be preserved
@@ -101,7 +140,9 @@ describe("StreamingToolExecutor", () => {
     const pipeline = new MiddlewarePipeline();
 
     const tools = [
-      makeTool("fail", async () => { throw new Error("boom"); }),
+      makeTool("fail", async () => {
+        throw new Error("boom");
+      }),
     ];
 
     const calls = [makeToolCall("1", "fail")];

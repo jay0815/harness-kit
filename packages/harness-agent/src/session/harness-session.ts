@@ -1,10 +1,7 @@
-import type {
-  AgentEvent,
-  AgentMessage,
-  AgentTool,
-} from "../core/types.js";
+import type { AgentEvent, AgentMessage, AgentTool } from "../core/types.js";
 import { IterationBudget } from "../core/types.js";
 import { MiddlewarePipeline } from "../core/middleware.js";
+import { FactVerificationMiddleware } from "../core/fact-verification.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
   HarnessAgentSessionConfig,
@@ -106,6 +103,18 @@ export class HarnessAgentSession {
         const pipeline = new MiddlewarePipeline();
         const emit = (event: AgentEvent) => this.handleEmit(event);
 
+        // 注册 FactVerificationMiddleware（session 默认 off，CLI 默认 strict）
+        const verifyMode = this.config.verifyMode ?? "off";
+        if (verifyMode !== "off") {
+          pipeline.register(
+            new FactVerificationMiddleware({
+              mode: verifyMode,
+              maxRetries: Math.max(0, this.config.maxVerificationRetries ?? 3),
+              workspaceDir: this.config.cwd,
+            }),
+          );
+        }
+
         const result = await runAgentLoop(
           {
             model: this.config.model,
@@ -192,7 +201,11 @@ export class HarnessAgentSession {
       } else if (event.type === "tool_execution_end") {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
         if (bridged) await this.dispatch("tool_execution_end", bridged.event);
-      } else if (event.type === "message_start" || event.type === "message_update" || event.type === "message_end") {
+      } else if (
+        event.type === "message_start" ||
+        event.type === "message_update" ||
+        event.type === "message_end"
+      ) {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
         if (bridged) await this.dispatch(event.type, bridged.event);
       }

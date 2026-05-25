@@ -3,7 +3,6 @@ import type {
   AgentTool,
   AgentToolCall,
   AgentToolResult,
-  LLMResponse,
   RuntimeState,
 } from "./types.js";
 import { PRIORITY_GUARD } from "./types.js";
@@ -12,8 +11,12 @@ export const CHANGE_TRACKER_KEY = "change_tracker";
 
 // Tools that modify code
 const CODE_MODIFYING_TOOLS = new Set([
-  "write_file", "edit_file", "delete_file",
-  "Write", "Edit", "MultiEdit",
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "Write",
+  "Edit",
+  "MultiEdit",
 ]);
 
 interface TrackerState {

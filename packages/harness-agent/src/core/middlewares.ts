@@ -6,7 +6,7 @@ import type {
   LLMResponse,
   RuntimeState,
 } from "./types.js";
-import { PRIORITY_EVAL, PRIORITY_EXTRACT, PRIORITY_GUARD, PRIORITY_INJECT } from "./types.js";
+import { PRIORITY_EVAL, PRIORITY_GUARD, PRIORITY_INJECT } from "./types.js";
 import { hasUnverifiedChanges, isLastVerifyOk, getLastVerifyError } from "./change-tracker.js";
 
 /**
@@ -71,7 +71,12 @@ export class ToolCallGuardrailMiddleware implements AgentMiddleware {
 
     if (failureCount >= this.blockThreshold) {
       return {
-        content: [{ type: "text" as const, text: `[Guardrail] Tool "${toolCall.name}" has failed ${failureCount} times. Blocked.` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `[Guardrail] Tool "${toolCall.name}" has failed ${failureCount} times. Blocked.`,
+          },
+        ],
         details: null,
         isError: true,
       };
@@ -147,10 +152,12 @@ export class QualityGateMiddleware implements AgentMiddleware {
     this.sentFeedback = false;
 
     return {
-      content: [{
-        type: "text" as const,
-        text: "[QualityGate] You have unverified code changes. Run verification (test, lint, typecheck) before finishing.",
-      }],
+      content: [
+        {
+          type: "text" as const,
+          text: "[QualityGate] You have unverified code changes. Run verification (test, lint, typecheck) before finishing.",
+        },
+      ],
       details: null,
     };
   }

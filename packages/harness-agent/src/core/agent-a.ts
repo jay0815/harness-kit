@@ -1,14 +1,10 @@
 import type {
   AgentAPreliminaryAssessment,
   AgentAState,
-  AgentBState,
-  AgentMessage,
   AgentTool,
-  LLMResponse,
   Model,
   StreamFn,
   TaskResult,
-  TaskSummary,
 } from "./types.js";
 import { createAgentB, runAgentB, type AgentBConfig } from "./agent-b.js";
 
@@ -52,7 +48,8 @@ export class AgentA {
 
     // Step 2: If unclear, ask for clarification
     if (!assessment.assessment.understood) {
-      const clarification = assessment.assessment.clarificationNeeded ?? "Could you clarify what you'd like me to do?";
+      const clarification =
+        assessment.assessment.clarificationNeeded ?? "Could you clarify what you'd like me to do?";
       emit({ type: "agent_a_clarification", data: { question: clarification } });
       return clarification;
     }
@@ -107,13 +104,25 @@ export class AgentA {
   /**
    * Preliminary assessment: understand what Human wants, evaluate complexity/risk.
    */
-  private assessInput(input: string): { assessment: AgentAPreliminaryAssessment; overview: string } {
+  private assessInput(input: string): {
+    assessment: AgentAPreliminaryAssessment;
+    overview: string;
+  } {
     // Simple heuristic-based assessment
     // In production, this could use LLM for better understanding
     const lower = input.toLowerCase();
 
-    const isQuestion = lower.includes("?") || lower.startsWith("what") || lower.startsWith("how") || lower.startsWith("why");
-    const isTask = lower.includes("implement") || lower.includes("create") || lower.includes("fix") || lower.includes("add") || lower.includes("refactor");
+    const isQuestion =
+      lower.includes("?") ||
+      lower.startsWith("what") ||
+      lower.startsWith("how") ||
+      lower.startsWith("why");
+    const isTask =
+      lower.includes("implement") ||
+      lower.includes("create") ||
+      lower.includes("fix") ||
+      lower.includes("add") ||
+      lower.includes("refactor");
     const isVague = input.length < 20 || lower === "help" || lower === "do something";
 
     if (isVague) {
@@ -177,7 +186,8 @@ export class AgentA {
 
   private estimateRisk(input: string): "low" | "medium" | "high" {
     const lower = input.toLowerCase();
-    if (lower.includes("delete") || lower.includes("remove") || lower.includes("drop")) return "high";
+    if (lower.includes("delete") || lower.includes("remove") || lower.includes("drop"))
+      return "high";
     if (lower.includes("refactor") || lower.includes("migrate")) return "medium";
     return "low";
   }

@@ -5,7 +5,10 @@ import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";
 import type { AgentLoopConfig, AgentEvent, AgentTool, AgentToolResult } from "./types.js";
 
-function makeTool(name: string, handler: (id: string, args: any) => Promise<AgentToolResult<any>>): AgentTool<any> {
+function makeTool(
+  name: string,
+  handler: (id: string, args: any) => Promise<AgentToolResult<any>>,
+): AgentTool<any> {
   return {
     name,
     label: name,
@@ -49,8 +52,14 @@ describe("registerFauxProvider integration", () => {
     const model = registration.getModel();
 
     registration.setResponses([
-      fauxMsg([{ type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/test.txt" } }]),
-      fauxMsg([{ type: "text", text: "File contains: hello world" }], { input: 80, output: 30, cacheRead: 0 }),
+      fauxMsg([
+        { type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/test.txt" } },
+      ]),
+      fauxMsg([{ type: "text", text: "File contains: hello world" }], {
+        input: 80,
+        output: 30,
+        cacheRead: 0,
+      }),
     ]);
 
     const tool = makeTool("read_file", async (_id, args) => textResult(`content of ${args.path}`));
@@ -65,7 +74,14 @@ describe("registerFauxProvider integration", () => {
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
     };
 
-    const result = await runAgentLoop(config, new IterationBudget(10), new MiddlewarePipeline(), (e) => { events.push(e); });
+    const result = await runAgentLoop(
+      config,
+      new IterationBudget(10),
+      new MiddlewarePipeline(),
+      (e) => {
+        events.push(e);
+      },
+    );
 
     const roles = result.messages.map((m: any) => m.role);
     expect(roles).toEqual(["user", "assistant", "toolResult", "assistant"]);
@@ -97,8 +113,16 @@ describe("registerFauxProvider integration", () => {
 
     registration.setResponses([
       fauxMsg([{ type: "toolCall", id: "tc1", name: "grep", arguments: { query: "foo" } }]),
-      fauxMsg([{ type: "toolCall", id: "tc2", name: "grep", arguments: { query: "bar" } }], { input: 80, output: 20, cacheRead: 0 }),
-      fauxMsg([{ type: "text", text: "Search complete." }], { input: 100, output: 15, cacheRead: 0 }),
+      fauxMsg([{ type: "toolCall", id: "tc2", name: "grep", arguments: { query: "bar" } }], {
+        input: 80,
+        output: 20,
+        cacheRead: 0,
+      }),
+      fauxMsg([{ type: "text", text: "Search complete." }], {
+        input: 100,
+        output: 15,
+        cacheRead: 0,
+      }),
     ]);
 
     let toolCallCount = 0;
@@ -116,14 +140,21 @@ describe("registerFauxProvider integration", () => {
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
     };
 
-    const result = await runAgentLoop(config, new IterationBudget(10), new MiddlewarePipeline(), () => {});
+    const result = await runAgentLoop(
+      config,
+      new IterationBudget(10),
+      new MiddlewarePipeline(),
+      () => {},
+    );
 
     expect(toolCallCount).toBe(2);
     const roles = result.messages.map((m: any) => m.role);
     expect(roles).toEqual([
       "user",
-      "assistant", "toolResult",
-      "assistant", "toolResult",
+      "assistant",
+      "toolResult",
+      "assistant",
+      "toolResult",
       "assistant",
     ]);
   });
@@ -134,7 +165,11 @@ describe("registerFauxProvider integration", () => {
 
     registration.setResponses([
       fauxMsg([{ type: "toolCall", id: "tc1", name: "fail_tool", arguments: {} }]),
-      fauxMsg([{ type: "text", text: "Sorry, the tool failed." }], { input: 80, output: 25, cacheRead: 0 }),
+      fauxMsg([{ type: "text", text: "Sorry, the tool failed." }], {
+        input: 80,
+        output: 25,
+        cacheRead: 0,
+      }),
     ]);
 
     const tool = makeTool("fail_tool", async () => {
@@ -150,7 +185,12 @@ describe("registerFauxProvider integration", () => {
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
     };
 
-    const result = await runAgentLoop(config, new IterationBudget(10), new MiddlewarePipeline(), () => {});
+    const result = await runAgentLoop(
+      config,
+      new IterationBudget(10),
+      new MiddlewarePipeline(),
+      () => {},
+    );
 
     const toolMsg = result.messages[2] as any;
     expect(toolMsg.role).toBe("toolResult");

@@ -63,4 +63,8 @@ export interface HarnessAgentSessionConfig {
   enablePersistence?: boolean;
   /** Max auto-retry rounds for sendUserMessage feedback. Default: 3 */
   maxAutoRetries?: number;
+  /** Fact verification mode. Default: "off" (CLI defaults to "strict") */
+  verifyMode?: "strict" | "warn" | "off";
+  /** Max verification retry rounds. Default: 3 */
+  maxVerificationRetries?: number;
 }

@@ -77,8 +77,14 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
   getSteeringMessages?: () => Promise<AgentMessage[]>;
   getFollowUpMessages?: () => Promise<AgentMessage[]>;
   toolExecution?: ToolExecutionMode;
-  beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
-  afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
+  beforeToolCall?: (
+    context: BeforeToolCallContext,
+    signal?: AbortSignal,
+  ) => Promise<BeforeToolCallResult | undefined>;
+  afterToolCall?: (
+    context: AfterToolCallContext,
+    signal?: AbortSignal,
+  ) => Promise<AfterToolCallResult | undefined>;
 }
 
 // ─── Thinking Level ────────────────────────────────────────────────
@@ -118,7 +124,10 @@ export interface AgentToolResult<T> {
 
 export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T>) => void;
 
-export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
+export interface AgentTool<
+  TParameters extends TSchema = TSchema,
+  TDetails = any,
+> extends Tool<TParameters> {
   label: string;
   prepareArguments?: (args: unknown) => Static<TParameters>;
   execute: (
@@ -149,8 +158,20 @@ export type AgentEvent =
   | { type: "message_update"; message: AgentMessage; assistantMessageEvent: AssistantMessageEvent }
   | { type: "message_end"; message: AgentMessage }
   | { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
-  | { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
-  | { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean };
+  | {
+      type: "tool_execution_update";
+      toolCallId: string;
+      toolName: string;
+      args: any;
+      partialResult: any;
+    }
+  | {
+      type: "tool_execution_end";
+      toolCallId: string;
+      toolName: string;
+      result: any;
+      isError: boolean;
+    };
 
 // ─── Middleware Pipeline ───────────────────────────────────────────
 
@@ -159,6 +180,16 @@ export interface LLMResponse {
   stopReason: string;
   usage?: { inputTokens: number; outputTokens: number };
 }
+
+// ─── AfterModel Control Flow ──────────────────────────────────────
+
+export type AfterModelResult =
+  | { action: "accept"; response: LLMResponse }
+  | { action: "retry"; feedback: string; response?: LLMResponse }
+  | { action: "fail"; reason: string; response?: LLMResponse };
+
+/** Middleware can return legacy LLMResponse or new AfterModelResult */
+export type AfterModelReturn = LLMResponse | AfterModelResult;
 
 export interface RuntimeState {
   context: AgentContext;
@@ -178,9 +209,21 @@ export interface AgentMiddleware {
   priority: number;
   name: string;
   beforeModel?(state: RuntimeState): Promise<void>;
-  afterModel?(state: RuntimeState, response: LLMResponse): Promise<LLMResponse>;
-  beforeTool?(state: RuntimeState, toolCall: AgentToolCall, tool: AgentTool | undefined): Promise<AgentToolResult<any> | null>;
-  afterTool?(state: RuntimeState, toolCall: AgentToolCall, tool: AgentTool | undefined, result: AgentToolResult<any>): Promise<AgentToolResult<any>>;
+  afterModel?(
+    state: RuntimeState,
+    response: LLMResponse,
+  ): AfterModelReturn | Promise<AfterModelReturn>;
+  beforeTool?(
+    state: RuntimeState,
+    toolCall: AgentToolCall,
+    tool: AgentTool | undefined,
+  ): Promise<AgentToolResult<any> | null>;
+  afterTool?(
+    state: RuntimeState,
+    toolCall: AgentToolCall,
+    tool: AgentTool | undefined,
+    result: AgentToolResult<any>,
+  ): Promise<AgentToolResult<any>>;
 }
 
 // Priority constants (lower = earlier execution)
@@ -266,4 +309,4 @@ export class IterationBudget {
 // ─── Token Threshold ───────────────────────────────────────────────
 
 export const AGENT_B_TOKEN_THRESHOLD = 0.9; // 90%
-export const COMPACTION_THRESHOLD = 0.75;    // 75% of context window
+export const COMPACTION_THRESHOLD = 0.75; // 75% of context window

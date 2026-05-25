@@ -20,6 +20,7 @@ Options:
   --workspace <dir>       Working directory (default: cwd)
   --system-prompt <text>  Custom system prompt
   --max-iterations <n>    Maximum agent loop iterations
+  --verify <mode>         Fact verification: strict (default), warn, off
   --no-extension          Don't load @harness-kit/core extension
   --help, -h              Show this help
   --version, -v           Show version`);

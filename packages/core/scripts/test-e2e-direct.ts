@@ -19,7 +19,7 @@ import {
   killPane,
   isPaneAlive,
 } from "../src/pane.js";
-import { extractResultBlock, hasCompleteResultBlock } from "../src/result-block.js";
+import { extractResultBlock } from "../src/result-block.js";
 import { verifyFacts } from "../src/verify.js";
 import { initTelemetry, emit, close, getLogPath } from "../src/telemetry.js";
 import { setWorkspaceDir } from "../src/tools.js";
@@ -109,7 +109,11 @@ async function main(): Promise<void> {
       console.error(output.slice(-500));
       fail("No HK_RESULT block found after 7.5s");
     }
-    emit("acp_msg", "read", { target: "mock-executor", status: "COMPLETE", factCount: result.facts.length });
+    emit("acp_msg", "read", {
+      target: "mock-executor",
+      status: "COMPLETE",
+      factCount: result.facts.length,
+    });
     pass(`Got result: "${result.currentWork}"`);
     pass(`Facts cited: ${result.facts.length}`);
 
@@ -213,7 +217,11 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error("\nFATAL:", err);
     if (paneId) {
-      try { killPane(paneId); } catch { /* ignore */ }
+      try {
+        killPane(paneId);
+      } catch {
+        /* ignore */
+      }
     }
     close();
     process.exit(1);

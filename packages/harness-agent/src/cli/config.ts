@@ -1,11 +1,5 @@
 import { resolve } from "node:path";
-import {
-  getModel,
-  getModels,
-  getProviders,
-  getEnvApiKey,
-  streamSimple,
-} from "@mariozechner/pi-ai";
+import { getModel, getModels, getProviders, getEnvApiKey, streamSimple } from "@mariozechner/pi-ai";
 import type { Model, StreamFn } from "../core/types.js";
 import type { HarnessAgentSessionConfig } from "../session/types.js";
 import type { ParsedArgs } from "./args.js";
@@ -25,16 +19,12 @@ const KEY_REQUIRED_PROVIDERS = new Set([
 export function resolveConfig(args: ParsedArgs): HarnessAgentSessionConfig {
   const providers = getProviders();
   if (!providers.includes(args.provider as any)) {
-    throw new Error(
-      `Unknown provider "${args.provider}". Available: ${providers.join(", ")}`,
-    );
+    throw new Error(`Unknown provider "${args.provider}". Available: ${providers.join(", ")}`);
   }
 
   let model: Model<any> | undefined;
   try {
-    model = getModel(args.provider as any, args.model as any) as
-      | Model<any>
-      | undefined;
+    model = getModel(args.provider as any, args.model as any) as Model<any> | undefined;
   } catch {
     model = undefined;
   }
@@ -59,5 +49,7 @@ export function resolveConfig(args: ParsedArgs): HarnessAgentSessionConfig {
     systemPrompt: args.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
     streamFn,
     maxIterations: args.maxIterations,
+    verifyMode: args.verify ?? "strict",
+    maxVerificationRetries: 3,
   };
 }

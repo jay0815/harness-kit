@@ -315,7 +315,9 @@ describe("HarnessAgentSession", () => {
 
   it("throws when prompt called while running", async () => {
     let resolveFirst: () => void;
-    const firstBlocker = new Promise<void>((r) => { resolveFirst = r; });
+    const firstBlocker = new Promise<void>((r) => {
+      resolveFirst = r;
+    });
 
     const streamFn = vi.fn().mockImplementation(async () => {
       await firstBlocker;
@@ -333,7 +335,9 @@ describe("HarnessAgentSession", () => {
 
     const firstPrompt = session.prompt("first");
 
-    await expect(session.prompt("second")).rejects.toThrow(/Cannot prompt while session is (running|dispatching)/);
+    await expect(session.prompt("second")).rejects.toThrow(
+      /Cannot prompt while session is (running|dispatching)/,
+    );
 
     resolveFirst!();
     await firstPrompt;
@@ -421,7 +425,10 @@ describe("HarnessAgentSession", () => {
     expect(files.length).toBe(1);
 
     const content = readFileSync(join(sessionDir, files[0]), "utf-8");
-    const lines = content.trim().split("\n").filter((l: string) => l.trim());
+    const lines = content
+      .trim()
+      .split("\n")
+      .filter((l: string) => l.trim());
     const entries = lines.map((l: string) => JSON.parse(l));
     const messageEntries = entries.filter((e: any) => e.type === "message");
 
@@ -511,7 +518,9 @@ describe("HarnessAgentSession", () => {
 
   it("shutdown during running prompt: aborts and preserves shutting_down", async () => {
     let resolveStream: () => void;
-    const streamBlocker = new Promise<void>((r) => { resolveStream = r; });
+    const streamBlocker = new Promise<void>((r) => {
+      resolveStream = r;
+    });
 
     const streamFn = vi.fn().mockImplementation(async () => {
       await streamBlocker;
@@ -545,9 +554,13 @@ describe("HarnessAgentSession", () => {
   it("shutdown sets signal.aborted on running prompt", async () => {
     let capturedSignal: AbortSignal | undefined;
     let resolveStream: () => void;
-    const streamBlocker = new Promise<void>((r) => { resolveStream = r; });
+    const streamBlocker = new Promise<void>((r) => {
+      resolveStream = r;
+    });
     let resolveStarted!: () => void;
-    const started = new Promise<void>((r) => { resolveStarted = r; });
+    const started = new Promise<void>((r) => {
+      resolveStarted = r;
+    });
 
     const streamFn = vi.fn().mockImplementation(async (_model: any, _ctx: any, opts: any) => {
       capturedSignal = opts.signal;
@@ -583,7 +596,9 @@ describe("HarnessAgentSession", () => {
 
   it("abort during running prompt, then new prompt works", async () => {
     let resolveStream: () => void;
-    const streamBlocker = new Promise<void>((r) => { resolveStream = r; });
+    const streamBlocker = new Promise<void>((r) => {
+      resolveStream = r;
+    });
     let callCount = 0;
 
     const streamFn = vi.fn().mockImplementation(async () => {
@@ -615,6 +630,49 @@ describe("HarnessAgentSession", () => {
     // Second prompt should work with a fresh AbortController
     await session.prompt("second");
     expect(session.sessionState).toBe("idle");
+    expect(callCount).toBe(2);
+  });
+
+  it("default verifyMode (off) allows text without HK_RESULT", async () => {
+    const streamFn = mockStreamFn("just a plain text response");
+    const session = new HarnessAgentSession(makeConfig({ streamFn }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    expect(session.sessionState).toBe("idle");
+  });
+
+  it("verifyMode off allows text without HK_RESULT", async () => {
+    const streamFn = mockStreamFn("just a plain text response");
+    const session = new HarnessAgentSession(makeConfig({ streamFn, verifyMode: "off" }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    expect(session.sessionState).toBe("idle");
+  });
+
+  it("verifyMode strict retries then fails on missing HK_RESULT", async () => {
+    let callCount = 0;
+    const streamFn = vi.fn().mockImplementation(async () => {
+      callCount++;
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "just text, no HK_RESULT" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
+    });
+
+    const session = new HarnessAgentSession(
+      makeConfig({ streamFn, verifyMode: "strict", maxVerificationRetries: 1 }),
+    );
+    await session.start();
+
+    await expect(session.prompt("hello")).rejects.toThrow(/Agent loop failed/);
+    // 1 initial + 1 retry = 2 calls
     expect(callCount).toBe(2);
   });
 });

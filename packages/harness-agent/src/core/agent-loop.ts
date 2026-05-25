@@ -18,7 +18,6 @@ export interface AgentLoopResult {
 
 export type AsyncEmit = (event: AgentEvent) => void | Promise<void>;
 
-
 export async function runAgentLoop(
   config: AgentLoopConfig,
   budget: IterationBudget,
@@ -90,10 +89,30 @@ export async function runAgentLoop(
     }
 
     // after_model chain
-    const finalResponse = await pipeline.runAfterModel(state, response);
+    const afterResult = await pipeline.runAfterModel(state, response);
+
+    if (afterResult.action === "retry") {
+      messages.push({
+        role: "user",
+        content: [{ type: "text", text: afterResult.feedback }],
+        timestamp: Date.now(),
+      } as any);
+      state.context.messages = messages;
+      budget.refund();
+      continue;
+    }
+
+    if (afterResult.action === "fail") {
+      throw new Error(`Agent loop failed: ${afterResult.reason}`);
+    }
+
+    // accept — continue with original logic
+    const finalResponse = afterResult.response;
 
     // Check for tool calls
-    const toolCalls = finalResponse.content.filter((c: any) => c.type === "toolCall") as AgentToolCall[];
+    const toolCalls = finalResponse.content.filter(
+      (c: any) => c.type === "toolCall",
+    ) as AgentToolCall[];
 
     if (toolCalls.length === 0) {
       // Pure text response — append and end
@@ -108,13 +127,7 @@ export async function runAgentLoop(
     }
 
     // Execute tool calls
-    const toolResults = await executeToolCalls(
-      toolCalls,
-      config,
-      state,
-      pipeline,
-      emit,
-    );
+    const toolResults = await executeToolCalls(toolCalls, config, state, pipeline, emit);
 
     // Append assistant message (with tool calls) and tool result messages
     messages.push({ role: "assistant", content: finalResponse.content } as any);
@@ -215,7 +228,12 @@ async function executeToolCalls(
       result = await tool.execute(toolCall.id, args, config.signal);
     } catch (err) {
       result = {
-        content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
         details: null,
         isError: true,
       };
@@ -252,16 +270,12 @@ async function collectStream(stream: any): Promise<LLMResponse> {
   }
 
   const content = msg.content.map((c: any) =>
-    c.type === "toolCall"
-      ? { ...c, input: c.input ?? c.arguments }
-      : c,
+    c.type === "toolCall" ? { ...c, input: c.input ?? c.arguments } : c,
   );
 
   return {
     content,
     stopReason: msg.stopReason,
-    usage: msg.usage
-      ? { inputTokens: msg.usage.input, outputTokens: msg.usage.output }
-      : undefined,
+    usage: msg.usage ? { inputTokens: msg.usage.input, outputTokens: msg.usage.output } : undefined,
   };
 }
