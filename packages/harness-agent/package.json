@@ -22,17 +22,6 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
-  "dependencies": {
-    "@mariozechner/pi-ai": "^0.73.1",
-    "@sinclair/typebox": "^0.34.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
-  },
   "peerDependencies": {
     "@harness-kit/core": "workspace:*"
   },
@@ -40,5 +29,16 @@
     "@harness-kit/core": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "catalog:",
+    "@sinclair/typebox": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

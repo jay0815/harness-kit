@@ -25,19 +25,19 @@
   "dependencies": {
     "@harness-kit/agent": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.73.1",
-    "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-ai": "catalog:",
     "@mariozechner/pi-coding-agent": "^0.73.1",
-    "@sinclair/typebox": "^0.34.0",
+    "@sinclair/typebox": "catalog:",
     "pi-kimi-coder": "^1.1.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "tsx": "^4.22.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

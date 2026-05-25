@@ -4,6 +4,33 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@mariozechner/pi-ai':
+      specifier: ^0.73.1
+      version: 0.73.1
+    '@sinclair/typebox':
+      specifier: ^0.34.49
+      version: 0.34.49
+    '@types/node':
+      specifier: ^22.19.19
+      version: 22.19.19
+    oxfmt:
+      specifier: ^0.51.0
+      version: 0.51.0
+    oxlint:
+      specifier: ^1.66.0
+      version: 1.66.0
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+    vite:
+      specifier: ^8.0.14
+      version: 8.0.14
+    vitest:
+      specifier: ^4.1.7
+      version: 4.1.7
+
 importers:
 
   .:
@@ -24,13 +51,13 @@ importers:
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.0)(zod@4.4.3)
       '@mariozechner/pi-ai':
-        specifier: ^0.73.1
+        specifier: 'catalog:'
         version: 0.73.1(ws@8.21.0)(zod@4.4.3)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.0)(zod@4.4.3)
       '@sinclair/typebox':
-        specifier: ^0.34.0
+        specifier: 'catalog:'
         version: 0.34.49
       pi-kimi-coder:
         specifier: ^1.1.0
@@ -40,22 +67,25 @@ importers:
         version: 2.9.0
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.19.19
+      oxfmt:
+        specifier: 'catalog:'
+        version: 0.51.0
       oxlint:
-        specifier: ^1.66.0
+        specifier: 'catalog:'
         version: 1.66.0
       tsx:
         specifier: ^4.22.0
         version: 4.22.3
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       vite:
-        specifier: ^8.0.14
+        specifier: 'catalog:'
         version: 8.0.14(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
       vitest:
-        specifier: ^4.1.7
+        specifier: 'catalog:'
         version: 4.1.7(@types/node@22.19.19)(vite@8.0.14(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/harness-agent:
@@ -64,23 +94,26 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mariozechner/pi-ai':
-        specifier: ^0.73.1
+        specifier: 'catalog:'
         version: 0.73.1(ws@8.21.0)(zod@4.4.3)
       '@sinclair/typebox':
-        specifier: ^0.34.0
+        specifier: 'catalog:'
         version: 0.34.49
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.19.19
+      oxfmt:
+        specifier: 'catalog:'
+        version: 0.51.0
       oxlint:
-        specifier: ^1.66.0
+        specifier: 'catalog:'
         version: 1.66.0
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.7
+        specifier: 'catalog:'
         version: 4.1.7(@types/node@22.19.19)(vite@8.0.14(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
 packages:
