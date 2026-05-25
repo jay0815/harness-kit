@@ -27,8 +27,8 @@
     "@earendil-works/pi-agent-core": "^0.75.5",
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "^0.75.5",
+    "@harness-kit/kimi-coder": "workspace:*",
     "@sinclair/typebox": "catalog:",
-    "pi-kimi-coder": "^1.1.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
