@@ -646,43 +646,52 @@ wiki 格式化后可以跨 session 复用：
 - 新 session 启动时注入 relevant knowledge
 - 参考 prax-agent 的 `MemoryBackend` 置信度评分机制
 
-### Phase 4: 事实校验迁移（verify → agent）
+### Phase 4: 硬事实校验下沉为默认闭环
 
-**目标**: 将事实校验从 `@harness-kit/core` 移入 `@harness-kit/agent` 作为固定能力。通过牺牲速度换取准确性。
+**目标**: 让 harness-agent 默认成为"会验证自己声明文件事实的 coding agent"，而不是"可动态加载验证扩展的普通 agent CLI"。
 
-**动机**: verify.ts、result-block.ts 是纯函数，零外部依赖。放在 core 中意味着 standalone 模式没有事实校验，agent 可以编造文件引用。
+**原则**: 通过牺牲速度换取准确性。不扩展 runtime 能力面，只兑现一个核心 middleware。
 
-#### Step 4.1: 迁移验证函数
+**动机**: verify.ts、result-block.ts 是纯函数，零外部依赖。放在 core 中意味着 standalone 模式没有事实校验，agent 可以编造文件引用。`--no-extension` 或 core 不可用时，agent 退化为普通 LLM REPL，与项目核心定位不一致。
 
-从 core 包移入 agent 包：
-- `verify.ts` → `packages/harness-agent/src/core/verify.ts`
-- `result-block.ts` → `packages/harness-agent/src/core/result-block.ts`
-- Fact/ResultBlock/VerifyReport/VerifyCheck 接口 → `packages/harness-agent/src/core/verify-types.ts`
+**非目标**:
+- 不做 subagent 调度
+- 不重构 pi-ai 抽象
+- 不让 Agent A/B 成为主路径
+- 不迁移所有 PI compatibility 代码
+- 不同时实现 IntentGate、QualityGate、ToolGuardrail 等一组概念
 
-#### Step 4.2: 创建 FactVerificationMiddleware
+**关键设计修正**:
 
-`packages/harness-agent/src/core/fact-verification.ts`
+1. **afterModel 控制流 contract** — `accept / retry / fail`，不隐式塞进 LLMResponse
+2. **verification retry budget 独立于 maxIterations** — 工具调用和校验修正不互相抢预算
+3. **`<HK_RESULT>` 缺失 = failure** — 模型不能通过不输出格式来绕过校验
+4. **`--verify strict|warn|off`** — 独立于 `--no-extension`，校验是核心能力不是扩展附庸
+5. **PI compatibility 不渗透到新 middleware** — 使用 harness-agent native 结构
 
-- afterModel 钩子（priority = PRIORITY_EXTRACT = 90）
-- 从 LLM response 中提取文本，调用 extractResultBlock()
-- 有 HK_RESULT 时调用 verifyFacts()
-- FAIL 时注入 user message 到 context.messages
-- PASS/FAIL 时更新 ChangeTracker metadata
+#### Step 4A: 最小 FactVerificationMiddleware
 
-#### Step 4.3: 注册为默认 middleware
+- afterModel 解析 `<HK_RESULT>`，PASS/missing/FAIL 分别处理
+- missing/FAIL → retry feedback，超过 `maxVerificationRetries` → fail
+- CLI 默认启用 strict 模式
 
-在 HarnessAgentSession.start() 中注册 FactVerificationMiddleware，与 ChangeTracker、ToolCallGuardrail 等并列。
+#### Step 4B: Verification 模式
 
-#### Step 4.4: 更新 core 包
+- `strict`（默认）：缺失/失败阻塞完成
+- `warn`：提示但不阻塞
+- `off`：debug/bare mode
 
-- core 的 verify.ts/result-block.ts 改为从 `@harness-kit/agent` re-export
-- core 的 index.ts 使用 agent 包的验证函数
-- core 的 turn_end 钩子保留 PI 特有逻辑（telemetry、sendUserMessage）
+#### Step 4C: Session 支持 middleware 注入
 
-#### Step 4.5: 迁移测试
+- `HarnessAgentSessionConfig` 增加 `middlewares?: AgentMiddleware[]`
+- CLI 默认注册 FactVerificationMiddleware
+- core extension 不再通过 `turn_end` hack 独占校验闭环
 
-- verify.test.ts、result-block.test.ts 从 core 迁移到 agent
-- 新建 fact-verification.test.ts（middleware 单元测试）
+#### Step 4D: 反馈质量与 ChangeTracker 增强
+
+- 记录文件路径、变更摘要
+- feedback 引用具体失败事实
+- 后续可接 QualityGate / ChangeTracker single-writer
 
 ### Phase 5: Error Recovery + Planning（借鉴 prax-agent）
 

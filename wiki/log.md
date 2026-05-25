@@ -216,6 +216,18 @@
 
 **原则**：通过牺牲速度换取准确性。计划落盘为下一阶段实施目标。
 
+**方案演进**（综合 GPT、Kimi 评审意见）：
+- afterModel 控制流 contract：accept / retry / fail，不隐式塞进 LLMResponse
+- verification retry budget 独立于 maxIterations
+- `<HK_RESULT>` 缺失 = verification failure，不是静默跳过
+- `--verify strict|warn|off` 独立于 `--no-extension`
+- Phase 4 拆分为 4A/4B/4C/4D，4A 是最小闭环
+- PI compatibility 不渗透到新 middleware
+
+**新增设计决策**（wiki/design-decisions.md）：
+- #9: `--verify strict|warn|off` 独立于 `--no-extension`
+- #10: verification retry budget 独立于 maxIterations
+
 ## [2026-05-25] design | Agent A 评估机制重设计
 
 **问题**：`assessInput()` 用 `includes("implement")`、`includes("fix")` 做任务分类，复杂度用词数估算。对真实输入太脆弱。

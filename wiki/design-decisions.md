@@ -58,11 +58,27 @@
 
 ## 8. Fact verification as core agent capability (not optional extension)
 
-**Decision**: `verifyFacts` 和 `extractResultBlock` 从 `@harness-kit/core` 移入 `@harness-kit/agent`，作为 FactVerificationMiddleware 自动注册到 agent pipeline 中。任何运行模式（standalone CLI 或 PI Extension）都自动生效。
+**Decision**: `verifyFacts` 和 `extractResultBlock` 从 `@harness-kit/core` 移入 `@harness-kit/agent`，作为 FactVerificationMiddleware 自动注册到 agent pipeline 中。任何运行模式（standalone CLI 或 PI Extension）都自动生效。`<HK_RESULT>` 缺失视为 verification failure，不是静默跳过。
 
 **Why**: 事实校验是"agent 是否可信"的核心机制。放在 core 中意味着 standalone 模式没有校验，agent 可以编造文件引用。verify.ts、result-block.ts 是纯函数（零外部依赖），天然属于 agent 包。通过牺牲速度换取准确性。
 
 **Trade-off**: core 的 turn_end 钩子仍会执行一次校验（用于 PI 特有的 telemetry 和 sendUserMessage）。两层校验有微量重复开销，但保证了 PI 模式下的 observability 不受影响。
+
+## 9. Verification modes separate from extensions
+
+**Decision**: `--verify strict|warn|off` 独立于 `--no-extension`。校验是核心能力，不是扩展的附庸。
+
+**Why**: `--no-extension` 的语义是"不加载 PI Extension"，不应该同时关闭事实校验。如果用户想关闭校验，需要明确使用 `--verify off`。
+
+**Trade-off**: 增加了一个 CLI 参数，但语义更清晰。
+
+## 10. Verification retry budget independent of maxIterations
+
+**Decision**: verification retry 有独立 budget（`maxVerificationRetries`），不从 `maxIterations` 中扣除。
+
+**Why**: `maxIterations` 控制 agent loop 总轮数。如果工具调用轮次和校验修正轮次共享 budget，行为难以解释——agent 做了 8 次工具调用后，只剩 2 次校验修正机会。
+
+**Trade-off**: 增加了一个配置项，但职责分离更清晰。
 
 ## 9. Custom workflow with dual executor types
 
