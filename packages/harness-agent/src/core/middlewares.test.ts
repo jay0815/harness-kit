@@ -58,6 +58,7 @@ describe("VerificationGuidanceMiddleware", () => {
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
     expect(out.content).toHaveLength(2);
     expect((out.content[1] as any).text).toContain("failed");
+    expect((out.content[1] as any).text).toContain("test broken");
   });
 
   it("ignores non-verify tools", async () => {
@@ -66,6 +67,62 @@ describe("VerificationGuidanceMiddleware", () => {
 
     const out = await mw.afterTool(state, makeToolCall("read_file"), undefined, result);
     expect(out.content).toHaveLength(1);
+  });
+
+  it("includes changed files in failure feedback", async () => {
+    const state = makeState({
+      codeGen: 2,
+      verifiedGen: 0,
+      lastVerifyOk: false,
+      lastVerifyError: "test broken",
+      changedFiles: [
+        { generation: 1, path: "src/auth.ts", toolName: "write_file" },
+        { generation: 2, path: "src/middleware.ts", toolName: "edit_file" },
+      ],
+    });
+    const result = makeResult("FAIL");
+
+    const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
+    expect((out.content[1] as any).text).toContain("src/auth.ts");
+    expect((out.content[1] as any).text).toContain("src/middleware.ts");
+  });
+
+  it("handles empty file list gracefully", async () => {
+    const state = makeState({
+      codeGen: 1,
+      verifiedGen: 0,
+      lastVerifyOk: false,
+      lastVerifyError: "test broken",
+      changedFiles: [],
+    });
+    const result = makeResult("FAIL");
+
+    const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
+    expect(out.content).toHaveLength(2);
+    expect((out.content[1] as any).text).toContain("failed");
+    expect((out.content[1] as any).text).not.toContain("Changed files:");
+  });
+
+  it("detects verification commands from arguments.command", async () => {
+    const state = makeState({
+      codeGen: 1,
+      verifiedGen: 0,
+      lastVerifyOk: false,
+      lastVerifyError: "test failed",
+      changedFiles: [],
+    });
+    const result = makeResult("FAIL");
+
+    const tc = {
+      id: "tc_1",
+      name: "Bash",
+      type: "toolCall",
+      arguments: { command: "pnpm run test" },
+    } as any;
+    const out = await mw.afterTool(state, tc, undefined, result);
+
+    expect(out.content).toHaveLength(2);
+    expect((out.content[1] as any).text).toContain("Verification failed");
   });
 });
 
@@ -176,13 +233,35 @@ describe("QualityGateMiddleware", () => {
     expect((out.content[0] as any).name).toBe("__quality_gate__");
   });
 
-  it("intercepts __quality_gate__ in beforeTool", async () => {
+  it("intercepts __quality_gate__ with file list", async () => {
     const mw = new QualityGateMiddleware();
-    const state = makeState();
+    const state = makeState({
+      codeGen: 2,
+      verifiedGen: 0,
+      changedFiles: [
+        { generation: 1, path: "src/auth.ts", toolName: "write_file" },
+        { generation: 2, path: "src/utils.ts", toolName: "edit_file" },
+      ],
+    });
 
     const result = await mw.beforeTool(state, makeToolCall("__quality_gate__"), undefined);
     expect(result).not.toBeNull();
-    expect((result!.content[0] as any).text).toContain("unverified");
+    expect((result!.content[0] as any).text).toContain("2 file(s)");
+    expect((result!.content[0] as any).text).toContain("src/auth.ts");
+    expect((result!.content[0] as any).text).toContain("src/utils.ts");
+  });
+
+  it("uses fallback text when file list is empty", async () => {
+    const mw = new QualityGateMiddleware();
+    const state = makeState({
+      codeGen: 1,
+      verifiedGen: 0,
+      changedFiles: [],
+    });
+
+    const result = await mw.beforeTool(state, makeToolCall("__quality_gate__"), undefined);
+    expect(result).not.toBeNull();
+    expect((result!.content[0] as any).text).toContain("file paths were not captured");
   });
 
   it("does not inject twice (sentFeedback flag)", async () => {

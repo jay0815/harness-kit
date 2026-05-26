@@ -7,7 +7,13 @@ import type {
   RuntimeState,
 } from "./types.js";
 import { PRIORITY_EVAL, PRIORITY_GUARD, PRIORITY_INJECT } from "./types.js";
-import { hasUnverifiedChanges, isLastVerifyOk, getLastVerifyError } from "./change-tracker.js";
+import {
+  hasUnverifiedChanges,
+  isLastVerifyOk,
+  getLastVerifyError,
+  getUnverifiedFiles,
+  isVerifyCommand,
+} from "./change-tracker.js";
 
 /**
  * VerificationGuidanceMiddleware — injects guidance after verification results.
@@ -33,10 +39,12 @@ export class VerificationGuidanceMiddleware implements AgentMiddleware {
       });
     } else {
       const error = getLastVerifyError(state);
-      // Append failure guidance
+      const unverified = getUnverifiedFiles(state);
+      const fileList =
+        unverified.length > 0 ? `\nChanged files: ${unverified.map((f) => f.path).join(", ")}` : "";
       result.content.push({
         type: "text" as const,
-        text: `\n[Guidance] Verification failed: ${error ?? "unknown error"}. Fix the issue before continuing.`,
+        text: `\n[Guidance] Verification failed: ${error ?? "unknown error"}${fileList}\nFix the issue before continuing.`,
       });
     }
 
@@ -143,7 +151,7 @@ export class QualityGateMiddleware implements AgentMiddleware {
   }
 
   async beforeTool(
-    _state: RuntimeState,
+    state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
   ): Promise<AgentToolResult<any> | null> {
@@ -151,11 +159,26 @@ export class QualityGateMiddleware implements AgentMiddleware {
 
     this.sentFeedback = false;
 
+    const unverified = getUnverifiedFiles(state);
+
+    if (unverified.length > 0) {
+      const fileList = unverified.map((f) => `  - ${f.path} (${f.toolName})`).join("\n");
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `[QualityGate] You have unverified changes in ${unverified.length} file(s):\n${fileList}\nRun verification (test, lint, typecheck) before finishing.`,
+          },
+        ],
+        details: null,
+      };
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: "[QualityGate] You have unverified code changes. Run verification (test, lint, typecheck) before finishing.",
+          text: "[QualityGate] You have unverified code changes, but file paths were not captured. Run verification (test, lint, typecheck) before finishing.",
         },
       ],
       details: null,
@@ -192,8 +215,9 @@ export class IntentGateMiddleware implements AgentMiddleware {
 function isVerifyTool(toolCall: AgentToolCall): boolean {
   if (toolCall.name === "verify" || toolCall.name === "VerifyCommand") return true;
   if (toolCall.name === "bash" || toolCall.name === "Bash") {
-    const command = String((toolCall as any).input?.command ?? "").trim();
-    return /\b(test|lint|typecheck|vitest|jest|pytest|tsc)\b/.test(command);
+    const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+    const command = String(args.command ?? "").trim();
+    return isVerifyCommand(command);
   }
   return false;
 }

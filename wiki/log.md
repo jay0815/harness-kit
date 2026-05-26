@@ -266,3 +266,17 @@
 - 未来路径：定义自有消息格式 → 通用 stream 协议 → 转换层 → 替换 mock
 
 计划落盘到 wiki/agent-runtime-plan.md。
+
+## [2026-05-26] chore | Inline pi-kimi-coder as @harness-kit/kimi-coder
+
+**动机**：pi-kimi-coder 的 peerDependencies 指向已弃用的 `@mariozechner/*` scope，导致 lockfile 中残留 52 处废弃引用，pnpm install 持续报警告。
+
+**方案**：
+- 将 pi-kimi-coder 源码内联为 monorepo workspace 包 `@harness-kit/kimi-coder`
+- 更新 peerDependencies 为 `@earendil-works/*` 新 scope
+- 通过 `workspace:*` 引入，消除第三方包的传递性废弃依赖
+
+**结果**：
+- pnpm install 无 `@mariozechner` 警告
+- lockfile 中 `@mariozechner` 引用清零
+- packages/core 通过 `workspace:*` 依赖 `@harness-kit/kimi-coder`

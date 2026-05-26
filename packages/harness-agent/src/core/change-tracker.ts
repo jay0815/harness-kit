@@ -19,11 +19,18 @@ const CODE_MODIFYING_TOOLS = new Set([
   "MultiEdit",
 ]);
 
+export interface ChangeEntry {
+  generation: number;
+  toolName: string;
+  path: string;
+}
+
 interface TrackerState {
   codeGen: number;
   verifiedGen: number;
   lastVerifyOk: boolean;
   lastVerifyError: string | null;
+  changedFiles: ChangeEntry[];
 }
 
 function defaultTrackerState(): TrackerState {
@@ -32,6 +39,7 @@ function defaultTrackerState(): TrackerState {
     verifiedGen: 0,
     lastVerifyOk: false,
     lastVerifyError: null,
+    changedFiles: [],
   };
 }
 
@@ -56,7 +64,7 @@ function getTracker(state: RuntimeState): TrackerState {
  * Other middleware read CHANGE_TRACKER_KEY from RuntimeState.metadata (read-only).
  */
 export class ChangeTracker implements AgentMiddleware {
-  priority = PRIORITY_GUARD; // 5 — runs first
+  priority = PRIORITY_GUARD; // 10 — guard level
   name = "ChangeTracker";
 
   async afterTool(
@@ -86,6 +94,14 @@ export class ChangeTracker implements AgentMiddleware {
     // Increment codeGen on code-modifying tool success
     if (isCode) {
       tracker.codeGen++;
+      const path = this.extractPath(toolCall);
+      if (path) {
+        tracker.changedFiles.push({
+          generation: tracker.codeGen,
+          toolName: toolCall.name,
+          path,
+        });
+      }
     }
 
     // Update verification state
@@ -101,10 +117,18 @@ export class ChangeTracker implements AgentMiddleware {
   private isVerifyAttempt(toolCall: AgentToolCall): boolean {
     if (toolCall.name === "verify" || toolCall.name === "VerifyCommand") return true;
     if (toolCall.name === "bash" || toolCall.name === "Bash") {
-      const command = String((toolCall as any).input?.command ?? "").trim();
+      const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+      const command = String(args.command ?? "").trim();
       return isVerifyCommand(command);
     }
     return false;
+  }
+
+  private extractPath(toolCall: AgentToolCall): string | null {
+    const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+    const raw = args.path ?? args.file_path;
+    const path = typeof raw === "string" ? raw.trim() : "";
+    return path.length > 0 ? path : null;
   }
 
   private extractError(result: AgentToolResult<any>): string {
@@ -119,7 +143,7 @@ export class ChangeTracker implements AgentMiddleware {
 /**
  * Check if a command is a verification command (test, lint, typecheck).
  */
-function isVerifyCommand(command: string): boolean {
+export function isVerifyCommand(command: string): boolean {
   const verifyPatterns = [
     /\bnpm\s+(run\s+)?test\b/,
     /\bpnpm\s+(run\s+)?test\b/,
@@ -161,4 +185,34 @@ export function getLastVerifyError(state: RuntimeState): string | null {
 export function isLastVerifyOk(state: RuntimeState): boolean {
   const tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
   return tracker?.lastVerifyOk ?? false;
+}
+
+/**
+ * Helper: get unverified file changes (files modified after last verification).
+ * Filters by generation > verifiedGen, validates entry structure, deduplicates by path.
+ */
+export function getUnverifiedFiles(state: RuntimeState): ChangeEntry[] {
+  const tracker = state.metadata[CHANGE_TRACKER_KEY] as TrackerState | undefined;
+  if (!tracker || tracker.codeGen <= tracker.verifiedGen) return [];
+
+  const changedFiles = tracker.changedFiles ?? [];
+  const unverified = changedFiles.filter(
+    (entry) =>
+      typeof entry.generation === "number" &&
+      typeof entry.path === "string" &&
+      entry.path.trim().length > 0 &&
+      typeof entry.toolName === "string" &&
+      entry.toolName.length > 0 &&
+      entry.generation > tracker.verifiedGen,
+  );
+
+  const latestByPath = new Map<string, ChangeEntry>();
+  for (const entry of unverified) {
+    const existing = latestByPath.get(entry.path);
+    if (!existing || entry.generation > existing.generation) {
+      latestByPath.set(entry.path, entry);
+    }
+  }
+
+  return [...latestByPath.values()].sort((a, b) => a.generation - b.generation);
 }
