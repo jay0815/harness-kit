@@ -2,6 +2,7 @@ import type { AgentEvent, AgentMessage, AgentTool } from "../core/types.js";
 import { IterationBudget } from "../core/types.js";
 import { MiddlewarePipeline } from "../core/middleware.js";
 import { FactVerificationMiddleware } from "../core/fact-verification.js";
+import { evaluateTaskWithSource } from "../core/evaluator.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
   HarnessAgentSessionConfig,
@@ -75,6 +76,32 @@ export class HarnessAgentSession {
       this.state = "running";
 
       try {
+        // Assessment preflight — context isolation boundary
+        // Evaluate BEFORE pushing to messages, only pass raw user string
+        if (this.config.enableAssessment && userText !== null && userText.trim().length > 0) {
+          const assessment = await evaluateTaskWithSource(
+            {
+              model: this.config.assessmentModel ?? this.config.model,
+              streamFn: this.config.streamFn,
+              workspaceDir: this.config.cwd,
+            },
+            userText,
+          );
+
+          if (assessment.source === "model" && !assessment.evaluation.understood) {
+            await this.dispatch("assessment_clarification", {
+              type: "assessment_clarification",
+              question:
+                assessment.evaluation.clarificationNeeded ??
+                "Could you clarify what you'd like me to do?",
+            });
+            return;
+          }
+
+          // source === "fallback" → bypass assessment, continue main loop
+          // source === "model" && understood → continue main loop
+        }
+
         if (userText !== null && userText.trim().length > 0) {
           this.messages.push({ role: "user", content: [{ type: "text", text: userText }] } as any);
         }

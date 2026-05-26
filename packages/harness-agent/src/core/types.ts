@@ -281,6 +281,35 @@ export interface AgentAPreliminaryAssessment {
   clarificationNeeded?: string;
 }
 
+// ─── Task Evaluation ──────────────────────────────────────────────
+
+export interface TaskEvaluation {
+  understood: boolean;
+  taskOverview: string;
+  complexity: "low" | "medium" | "high";
+  complexityReason: string;
+  risk: "low" | "medium" | "high";
+  riskReason: string;
+  needsExecution: boolean;
+  executor: "internal" | "claude" | "codex";
+  clarificationNeeded?: string;
+  reasoning: string;
+}
+
+/** @deprecated Use TaskEvaluation instead */
+export function toAgentAPreliminaryAssessment(
+  evaluation: TaskEvaluation,
+): AgentAPreliminaryAssessment {
+  return {
+    understood: evaluation.understood,
+    taskOverview: evaluation.taskOverview,
+    complexity: evaluation.complexity,
+    risk: evaluation.risk,
+    needsAgentB: evaluation.needsExecution,
+    clarificationNeeded: evaluation.clarificationNeeded,
+  };
+}
+
 // ─── Iteration Budget ──────────────────────────────────────────────
 
 export class IterationBudget {

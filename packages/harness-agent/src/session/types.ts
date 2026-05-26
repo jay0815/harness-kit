@@ -75,4 +75,8 @@ export interface HarnessAgentSessionConfig {
   maxVerificationRetries?: number;
   /** User-supplied middleware instances. Reused across prompts; mutable state persists. */
   middlewares?: AgentMiddleware[];
+  /** Enable LLM-based task assessment before main loop. Default: false */
+  enableAssessment?: boolean;
+  /** Model for assessment (defaults to main model) */
+  assessmentModel?: Model<any>;
 }

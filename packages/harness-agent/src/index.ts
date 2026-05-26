@@ -15,4 +15,6 @@ export type {
   VerificationMode,
   FactVerificationConfig,
 } from "./core/fact-verification.js";
+export { evaluateTask } from "./core/evaluator.js";
+export type { EvaluateTaskConfig } from "./core/evaluator.js";
 export * from "./session/index.js";

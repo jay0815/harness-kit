@@ -732,3 +732,165 @@ describe("HarnessAgentSession", () => {
     expect(callCount).toBe(2);
   });
 });
+
+describe("assessment preflight", () => {
+  function evaluationResponse(overrides?: Record<string, unknown>) {
+    return JSON.stringify({
+      understood: true,
+      taskOverview: "Implement auth",
+      complexity: "medium",
+      complexityReason: "Multi-file",
+      risk: "low",
+      riskReason: "New code",
+      needsExecution: true,
+      executor: "internal",
+      reasoning: "Task",
+      ...overrides,
+    });
+  }
+
+  it("enableAssessment: false skips evaluation entirely", async () => {
+    const streamFn = mockStreamFn("done");
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: false }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    // streamFn called once — no evaluation call
+    expect(streamFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("evaluation only sees raw user input, not session history", async () => {
+    let capturedEvalMessages: any[] = [];
+    let callCount = 0;
+
+    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call = evaluation — capture its messages
+        capturedEvalMessages = ctx.messages;
+      }
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: callCount === 1 ? evaluationResponse() : "done" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
+    });
+
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    // Evaluation call should have exactly 1 message (the raw user input)
+    // and NOT the session's accumulated history
+    expect(capturedEvalMessages).toHaveLength(1);
+    expect(capturedEvalMessages[0].content[0].text).toBe("hello");
+  });
+
+  it("source: model && understood continues to main loop", async () => {
+    let callCount = 0;
+    const streamFn = vi.fn().mockImplementation(async () => {
+      callCount++;
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: callCount === 1 ? evaluationResponse() : "done" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
+    });
+
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    // Both evaluation and main loop called
+    expect(streamFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("source: model && !understood dispatches assessment_clarification", async () => {
+    const evalJson = evaluationResponse({
+      understood: false,
+      clarificationNeeded: "What do you need?",
+    });
+    const streamFn = vi.fn().mockImplementation(async () => ({
+      result: async () => ({
+        content: [{ type: "text", text: evalJson }],
+        stopReason: "end_turn",
+        usage: { input: 100, output: 50 },
+      }),
+    }));
+
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
+
+    const events: string[] = [];
+    session.extensionAPI.on("assessment_clarification", () => {
+      events.push("assessment_clarification");
+    });
+    session.extensionAPI.on("agent_end", () => {
+      events.push("agent_end");
+    });
+
+    await session.start();
+    await session.prompt("hello");
+
+    expect(events).toContain("assessment_clarification");
+    // agent_end dispatched exactly once (by prompt() end, not by clarification branch)
+    expect(events.filter((e) => e === "agent_end")).toHaveLength(1);
+    // streamFn called only once (evaluation), not for main loop
+    expect(streamFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("source: fallback bypasses assessment and continues main loop", async () => {
+    let callCount = 0;
+    const streamFn = vi.fn().mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("network error");
+      }
+      return {
+        result: async () => ({
+          content: [{ type: "text", text: "done" }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
+    });
+
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    // Fallback → bypass → main loop still runs
+    expect(streamFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("clarification does not add user message to messages", async () => {
+    const evalJson = evaluationResponse({
+      understood: false,
+      clarificationNeeded: "What?",
+    });
+    const streamFn = vi.fn().mockImplementation(async () => ({
+      result: async () => ({
+        content: [{ type: "text", text: evalJson }],
+        stopReason: "end_turn",
+        usage: { input: 100, output: 50 },
+      }),
+    }));
+
+    const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
+
+    await session.start();
+    await session.prompt("hello");
+
+    // messages should not contain the user text (clarification happened before push)
+    const messages = (session as any).messages;
+    const userMsgs = messages.filter((m: any) => m.role === "user");
+    expect(userMsgs).toHaveLength(0);
+  });
+});
