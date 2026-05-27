@@ -7,18 +7,20 @@ import { FACT_VERIFICATION_KEY } from "@harness-kit/agent";
 import type { FactVerificationMetadata } from "@harness-kit/agent";
 
 function createMockPI(): HarnessExtensionAPI & {
-  handlers: Record<string, (...args: any[]) => any>;
+  handlers: Record<string, (...args: unknown[]) => unknown>;
   sentMessages: string[];
 } {
-  const handlers: Record<string, (...args: any[]) => any> = {};
+  const handlers: Record<string, (...args: unknown[]) => unknown> = {};
   const sentMessages: string[] = [];
+
+  const on = (event: string, handler: (...args: unknown[]) => unknown) => {
+    handlers[event] = handler;
+  };
 
   return {
     handlers,
     sentMessages,
-    on(event: string, handler: (...args: any[]) => any) {
-      handlers[event] = handler;
-    },
+    on: on as HarnessExtensionAPI["on"],
     registerTool: vi.fn(),
     sendUserMessage(content: string) {
       sentMessages.push(content);
@@ -58,7 +60,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("with agentMeta.status=pass, does not call verifyFacts, does not sendUserMessage", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
 
     // Simulate session_start
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
@@ -84,7 +86,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("with agentMeta.status=fail and report, does not sendUserMessage", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {
@@ -114,7 +116,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("with agentMeta.status=fail and report=null, does not fallback verify", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {
@@ -132,7 +134,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("with agentMeta.status=missing, does not fallback verify", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {
@@ -150,7 +152,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("with agentMeta.status=empty, does not fallback verify", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {
@@ -168,7 +170,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("without metadata, falls back to old verify logic", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const event = makeTurnEndEvent({ text: "just text, no HK_RESULT" });
@@ -180,7 +182,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("pass metadata advances phase (artifact saved)", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     // Write a file that matches the claimed fact
@@ -213,7 +215,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("fail metadata does not advance phase", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {
@@ -244,7 +246,7 @@ describe("core turn_end handler — metadata path", () => {
 
   it("missing metadata does not advance phase", () => {
     const pi = createMockPI();
-    harnessKitExtension(pi as any);
+    harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
 
     const agentMeta: FactVerificationMetadata = {

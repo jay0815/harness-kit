@@ -2,8 +2,8 @@ import type { HarnessExtensionAPI, ToolDefinition } from "./types.js";
 
 /** Internal session surface that the adapter delegates to */
 export interface SessionAdapterTarget {
-  addEventHandler(event: string, handler: (...args: any[]) => any): void;
-  registerTool(tool: ToolDefinition<any, any, any>): void;
+  addEventHandler(event: string, handler: (...args: unknown[]) => unknown): void;
+  registerTool(tool: ToolDefinition): void;
   enqueueUserMessage(content: string): void;
 }
 
@@ -12,12 +12,14 @@ export interface SessionAdapterTarget {
  * PI-compatible: on(), registerTool(), sendUserMessage().
  */
 export function createExtensionAPI(target: SessionAdapterTarget): HarnessExtensionAPI {
-  return {
-    on(event: string, handler: (...args: any[]) => any): void {
-      target.addEventHandler(event, handler);
-    },
+  const on = (event: string, handler: (...args: unknown[]) => unknown): void => {
+    target.addEventHandler(event, handler);
+  };
 
-    registerTool(tool: ToolDefinition<any, any, any>): void {
+  return {
+    on: on as HarnessExtensionAPI["on"],
+
+    registerTool(tool: ToolDefinition): void {
       target.registerTool(tool);
     },
 

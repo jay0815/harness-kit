@@ -98,33 +98,29 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
   // Auto-verify: intercept LLM output, verify facts, inject failure feedback
   pi.on("turn_end", (event) => {
-    const msg = event.message as { content?: unknown[] };
-    if (!Array.isArray(msg.content)) return;
+    if (!Array.isArray(event.message.content)) return;
 
     // 1. Public observability (all paths)
-    const content = msg.content as Array<{
-      type: string;
-      text?: string;
-      name?: string;
-      input?: unknown;
-      thinking?: string;
-    }>;
+    const content = event.message.content;
     const textParts = content.filter((c) => c.type === "text");
     const thinkingParts = content.filter((c) => c.type === "thinking");
     const toolCalls = content.filter((c) => c.type === "tool_use");
 
-    const text = textParts.map((c) => c.text ?? "").join("");
+    const text = textParts.map((c) => (c as { text?: string }).text ?? "").join("");
 
     emit("turn", "end", {
       turnIndex: event.turnIndex,
       textLength: text.length,
       textPreview: text.slice(0, 200),
       hasThinking: thinkingParts.length > 0,
-      toolCalls: toolCalls.map((t) => ({ name: t.name, input: t.input })),
+      toolCalls: toolCalls.map((t) => ({
+        name: (t as { name?: string }).name,
+        input: (t as { input?: unknown }).input,
+      })),
       currentPhase: harnessState?.currentPhase,
     });
 
-    const agentMeta = (event as any).metadata?.[FACT_VERIFICATION_KEY] as
+    const agentMeta = event.metadata?.[FACT_VERIFICATION_KEY] as
       | FactVerificationMetadata
       | undefined;
     const block = agentMeta?.block ?? extractResultBlock(text);

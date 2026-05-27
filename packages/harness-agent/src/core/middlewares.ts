@@ -7,6 +7,8 @@ import type {
   RuntimeState,
 } from "./types.js";
 import { PRIORITY_EVAL, PRIORITY_GUARD, PRIORITY_INJECT } from "./types.js";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AgentMessage } from "./types.js";
 import {
   hasUnverifiedChanges,
   isLastVerifyOk,
@@ -14,6 +16,7 @@ import {
   getUnverifiedFiles,
   isVerifyCommand,
 } from "./change-tracker.js";
+import { extractToolArgs } from "./tool-utils.js";
 
 /**
  * VerificationGuidanceMiddleware — injects guidance after verification results.
@@ -27,8 +30,8 @@ export class VerificationGuidanceMiddleware implements AgentMiddleware {
     state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
-    result: AgentToolResult<any>,
-  ): Promise<AgentToolResult<any>> {
+    result: AgentToolResult<unknown>,
+  ): Promise<AgentToolResult<unknown>> {
     if (!isVerifyTool(toolCall)) return result;
 
     if (isLastVerifyOk(state)) {
@@ -74,7 +77,7 @@ export class ToolCallGuardrailMiddleware implements AgentMiddleware {
     state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
-  ): Promise<AgentToolResult<any> | null> {
+  ): Promise<AgentToolResult<unknown> | null> {
     const failureCount = this.toolFailures.get(toolCall.name) ?? 0;
 
     if (failureCount >= this.blockThreshold) {
@@ -102,8 +105,8 @@ export class ToolCallGuardrailMiddleware implements AgentMiddleware {
     _state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
-    result: AgentToolResult<any>,
-  ): Promise<AgentToolResult<any>> {
+    result: AgentToolResult<unknown>,
+  ): Promise<AgentToolResult<unknown>> {
     if (result.isError) {
       const count = (this.toolFailures.get(toolCall.name) ?? 0) + 1;
       this.toolFailures.set(toolCall.name, count);
@@ -135,7 +138,7 @@ export class QualityGateMiddleware implements AgentMiddleware {
     if (!hasUnverifiedChanges(state)) return response;
     if (this.sentFeedback) return response; // Don't loop
 
-    const hasToolCalls = response.content.some((c: any) => c.type === "toolCall");
+    const hasToolCalls = response.content.some((c) => c.type === "toolCall");
     if (hasToolCalls) return response; // Model is still working
 
     // Model is trying to finish — inject synthetic tool call
@@ -144,8 +147,8 @@ export class QualityGateMiddleware implements AgentMiddleware {
       type: "toolCall" as const,
       id: `quality_gate_${Date.now()}`,
       name: "__quality_gate__",
-      input: { message: "You have unverified code changes. Run verification before finishing." },
-    } as any);
+      arguments: { message: "You have unverified code changes. Run verification before finishing." },
+    } satisfies Extract<AssistantMessage["content"][number], { type: "toolCall" }>);
 
     return response;
   }
@@ -154,7 +157,7 @@ export class QualityGateMiddleware implements AgentMiddleware {
     state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
-  ): Promise<AgentToolResult<any> | null> {
+  ): Promise<AgentToolResult<unknown> | null> {
     if (toolCall.name !== "__quality_gate__") return null;
 
     this.sentFeedback = false;
@@ -202,7 +205,7 @@ export class IntentGateMiddleware implements AgentMiddleware {
     state.context.messages.push({
       role: "user" as const,
       content: "[System] Before executing, briefly describe your plan in 1-2 sentences.",
-    } as any);
+    } as AgentMessage);
 
     this.planVerbalized = true;
   }
@@ -215,7 +218,7 @@ export class IntentGateMiddleware implements AgentMiddleware {
 function isVerifyTool(toolCall: AgentToolCall): boolean {
   if (toolCall.name === "verify" || toolCall.name === "VerifyCommand") return true;
   if (toolCall.name === "bash" || toolCall.name === "Bash") {
-    const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+    const args = extractToolArgs(toolCall);
     const command = String(args.command ?? "").trim();
     return isVerifyCommand(command);
   }

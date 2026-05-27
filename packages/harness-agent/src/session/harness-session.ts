@@ -5,6 +5,7 @@ import { FactVerificationMiddleware } from "../core/fact-verification.js";
 import { evaluateTaskWithSource } from "../core/evaluator.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
+  BeforeAgentStartResult,
   HarnessAgentSessionConfig,
   HarnessExtensionAPI,
   HarnessExtensionContext,
@@ -18,8 +19,8 @@ import { SessionPersistence } from "./session-persistence.js";
 
 export class HarnessAgentSession {
   private readonly config: HarnessAgentSessionConfig;
-  private readonly eventHandlers = new Map<string, Set<(...args: any[]) => any>>();
-  private readonly registeredTools = new Map<string, ToolDefinition<any, any, any>>();
+  private readonly eventHandlers = new Map<string, Set<(...args: unknown[]) => unknown>>();
+  private readonly registeredTools = new Map<string, ToolDefinition>();
   private readonly userMessageQueue: string[] = [];
   private readonly maxAutoRetries: number;
 
@@ -89,12 +90,17 @@ export class HarnessAgentSession {
           );
 
           if (assessment.source === "model" && !assessment.evaluation.understood) {
-            await this.dispatch("assessment_clarification", {
-              type: "assessment_clarification",
-              question:
-                assessment.evaluation.clarificationNeeded ??
-                "Could you clarify what you'd like me to do?",
-            });
+            const assessCtx = this.makeExtensionContext();
+            await this.dispatch(
+              "assessment_clarification",
+              {
+                type: "assessment_clarification",
+                question:
+                  assessment.evaluation.clarificationNeeded ??
+                  "Could you clarify what you'd like me to do?",
+              },
+              assessCtx,
+            );
             return;
           }
 
@@ -103,23 +109,33 @@ export class HarnessAgentSession {
         }
 
         if (userText !== null && userText.trim().length > 0) {
-          this.messages.push({ role: "user", content: [{ type: "text", text: userText }] } as any);
+          this.messages.push({
+            role: "user",
+            content: [{ type: "text", text: userText }],
+          } as AgentMessage);
         }
 
         while (this.userMessageQueue.length > 0) {
           const feedback = this.userMessageQueue.shift()!;
-          this.messages.push({ role: "user", content: [{ type: "text", text: feedback }] } as any);
+          this.messages.push({
+            role: "user",
+            content: [{ type: "text", text: feedback }],
+          } as AgentMessage);
         }
 
-        const baseTools: AgentTool<any>[] = this.config.tools ?? [];
+        const baseTools: AgentTool[] = this.config.tools ?? [];
         const ctxFactory = () => this.makeExtensionContext();
         const tools = mergeTools(baseTools, this.registeredTools, ctxFactory);
 
         let systemPrompt = this.config.systemPrompt;
         const basHandlers = this.eventHandlers.get("before_agent_start");
         if (basHandlers) {
+          const basCtx = this.makeExtensionContext();
           for (const handler of basHandlers) {
-            const result = await handler({ type: "before_agent_start", systemPrompt });
+            const result = (await handler(
+              { type: "before_agent_start", systemPrompt },
+              basCtx,
+            )) as BeforeAgentStartResult | void;
             if (result && typeof result.systemPrompt === "string") {
               systemPrompt = result.systemPrompt;
             }
@@ -189,7 +205,8 @@ export class HarnessAgentSession {
       await runOnce(null);
     }
 
-    await this.dispatch("agent_end", { type: "agent_end", messages: this.messages });
+    const endCtx = this.makeExtensionContext();
+    await this.dispatch("agent_end", { type: "agent_end", messages: this.messages }, endCtx);
   }
 
   enqueueUserMessage(content: string): void {
@@ -203,13 +220,14 @@ export class HarnessAgentSession {
   async shutdown(): Promise<void> {
     this.state = "shutting_down";
     this.currentAbortController?.abort();
-    await this.dispatch("session_shutdown");
+    const ctx = this.makeExtensionContext();
+    await this.dispatch("session_shutdown", { type: "session_shutdown" }, ctx);
     this.persistence?.close();
   }
 
   // ─── Internal ────────────────────────────────────────────────────
 
-  private addEventHandler(event: string, handler: (...args: any[]) => any): void {
+  private addEventHandler(event: string, handler: (...args: unknown[]) => unknown): void {
     const handlers = this.eventHandlers.get(event) ?? new Set();
     handlers.add(handler);
     this.eventHandlers.set(event, handlers);
@@ -220,26 +238,34 @@ export class HarnessAgentSession {
     this.state = "dispatching";
 
     try {
-      if (event.type === "turn_start") {
+      const ctx = this.makeExtensionContext();
+
+      if (event.type === "agent_start") {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
-        if (bridged) await this.dispatch("turn_start", bridged.event);
+        if (bridged) await this.dispatch("agent_start", bridged.event, ctx);
+      } else if (event.type === "turn_start") {
+        const bridged = bridgeAgentEvent(event, this.turnIndex);
+        if (bridged) await this.dispatch("turn_start", bridged.event, ctx);
       } else if (event.type === "turn_end") {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
-        if (bridged) await this.dispatch("turn_end", bridged.event);
+        if (bridged) await this.dispatch("turn_end", bridged.event, ctx);
         this.turnIndex++;
       } else if (event.type === "tool_execution_start") {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
-        if (bridged) await this.dispatch("tool_execution_start", bridged.event);
+        if (bridged) await this.dispatch("tool_execution_start", bridged.event, ctx);
+      } else if (event.type === "tool_execution_update") {
+        const bridged = bridgeAgentEvent(event, this.turnIndex);
+        if (bridged) await this.dispatch("tool_execution_update", bridged.event, ctx);
       } else if (event.type === "tool_execution_end") {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
-        if (bridged) await this.dispatch("tool_execution_end", bridged.event);
+        if (bridged) await this.dispatch("tool_execution_end", bridged.event, ctx);
       } else if (
         event.type === "message_start" ||
         event.type === "message_update" ||
         event.type === "message_end"
       ) {
         const bridged = bridgeAgentEvent(event, this.turnIndex);
-        if (bridged) await this.dispatch(event.type, bridged.event);
+        if (bridged) await this.dispatch(event.type, bridged.event, ctx);
       }
     } finally {
       if (this.state === "dispatching") {
@@ -248,7 +274,7 @@ export class HarnessAgentSession {
     }
   }
 
-  private async dispatch(event: string, ...args: any[]): Promise<void> {
+  private async dispatch(event: string, ...args: unknown[]): Promise<void> {
     const handlers = this.eventHandlers.get(event);
     if (!handlers) return;
 

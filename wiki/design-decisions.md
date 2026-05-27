@@ -122,3 +122,19 @@ harness-kit 已实现：
 - **Auto-verify**：turn_end 自动拦截验证，不依赖 LLM 自觉
 
 下一步：P2 多轮迭代 + 收敛检测（goals 模式）
+
+## 11. ToolCall `input` vs `arguments` 运行时不一致
+
+**Decision**: PI SDK 的 `ToolCall` 类型只有 `arguments: Record<string, any>`，没有 `input` 字段。`bridgeContentBlocks`（处理 SDK 内部 assistant message content）已改为直接用 `block.arguments`。Tool 执行层（`tool-utils.ts`、`agent-loop.ts`）保留 `input ?? arguments` 防御逻辑。
+
+**Why**: 两处处理的数据来源不同：
+
+| 位置 | 数据来源 | 是否需要防御 |
+|------|----------|-------------|
+| `bridgeContentBlocks` (event-bridge.ts) | PI SDK 内部流转的 assistant message | 不需要，SDK 保证 `ToolCall.arguments` |
+| `extractToolArgs` (tool-utils.ts:9) | LLM 响应解析后的 toolCall content block | 需要，部分 provider 运行时返回 `input` |
+| content block 映射 (agent-loop.ts:278) | 同上 | 需要，同上 |
+
+**Trade-off**: `bridgeContentBlocks` 的类型精确化消除了 `Record<string, unknown>` 断言，但 tool 执行层的防御逻辑作为独立技术债保留。
+
+**消除条件**: 上游 PI SDK 在 `ToolCall` 上补 `input?: Record<string, any>`，或本地改为统一类型守卫函数处理 `input`/`arguments` 映射。

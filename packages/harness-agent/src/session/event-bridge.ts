@@ -1,16 +1,46 @@
+import { ImageContent, TextContent, ThinkingContent, ToolCall } from "@earendil-works/pi-ai";
 import type { AgentEvent } from "../core/types.js";
+import type {
+  AgentEndPayload,
+  AgentStartPayload,
+  MessageEndPayload,
+  MessageStartPayload,
+  MessageUpdatePayload,
+  ToolExecutionEndPayload,
+  ToolExecutionStartPayload,
+  ToolExecutionUpdatePayload,
+  TurnEndPayload,
+  TurnStartPayload,
+} from "./types.js";
 
-/** PI-shaped extension event with turnIndex */
-export interface BridgedEvent {
-  type: string;
-  event: any;
-}
+/** PI-shaped extension event with turnIndex — discriminated union */
+export type BridgedEvent =
+  | { type: "agent_start"; event: AgentStartPayload }
+  | { type: "agent_end"; event: AgentEndPayload }
+  | { type: "turn_start"; event: TurnStartPayload }
+  | { type: "turn_end"; event: TurnEndPayload }
+  | { type: "tool_execution_start"; event: ToolExecutionStartPayload }
+  | { type: "tool_execution_update"; event: ToolExecutionUpdatePayload }
+  | { type: "tool_execution_end"; event: ToolExecutionEndPayload }
+  | { type: "message_start"; event: MessageStartPayload }
+  | { type: "message_update"; event: MessageUpdatePayload }
+  | { type: "message_end"; event: MessageEndPayload };
+
+type ContentBlocks = (TextContent | ImageContent)[] | (TextContent | ThinkingContent | {
+  type: "tool_use"
+  id: string
+  name: string
+  // oxlint-disable-next-line typescript/no-explicit-any
+  input: Record<string, any>
+})[]
 
 /**
  * Convert internal toolCall content blocks to PI's tool_use format.
  * Only transforms blocks in assistant messages; other roles pass through.
  */
-export function bridgeContentBlocks(content: any[]): any[] {
+export function bridgeContentBlocks(
+  content: (TextContent | ImageContent)[] | (TextContent | ThinkingContent | ToolCall)[],
+): ContentBlocks {
   if (!Array.isArray(content)) return content;
   return content.map((block) => {
     if (block?.type === "toolCall") {
@@ -18,11 +48,11 @@ export function bridgeContentBlocks(content: any[]): any[] {
         type: "tool_use",
         id: block.id,
         name: block.name,
-        input: block.input ?? block.arguments,
+        input: block.arguments,
       };
     }
     return block;
-  });
+  }) as ContentBlocks;
 }
 
 /**
@@ -42,14 +72,16 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
       };
 
     case "turn_end": {
-      const msg = event.message as any;
-      const bridgedMessage = msg ? { ...msg, content: bridgeContentBlocks(msg.content) } : msg;
+      const msg = event.message;
+      const bridgedContent = Array.isArray(msg.content)
+        ? bridgeContentBlocks(msg.content)
+        : undefined;
       return {
         type: "turn_end",
         event: {
           type: "turn_end",
           turnIndex,
-          message: bridgedMessage,
+          message: { ...event.message, content: bridgedContent } as TurnEndPayload["message"],
           toolResults: event.toolResults,
           metadata: event.metadata,
         },
@@ -71,7 +103,7 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
         event: {
           type: "message_update",
           message: event.message,
-          assistantMessageEvent: (event as any).assistantMessageEvent,
+          assistantMessageEvent: event.assistantMessageEvent,
         },
       };
 
@@ -103,7 +135,7 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
-          partialResult: (event as any).partialResult,
+          partialResult: event.partialResult,
         },
       };
 
@@ -125,7 +157,7 @@ export function bridgeAgentEvent(event: AgentEvent, turnIndex: number): BridgedE
     case "agent_end":
       return {
         type: "agent_end",
-        event: { type: "agent_end", messages: (event as any).messages },
+        event: { type: "agent_end", messages: event.messages },
       };
 
     default:
