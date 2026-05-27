@@ -1,30 +1,37 @@
 {
   "name": "@harness-kit/kimi-coder",
   "version": "1.1.0",
-  "description": "Pi extension for Kimi K2 Coding plan — OAuth-based provider with kimi-for-coding model",
-  "type": "module",
+  "description": "Pi extension for Kimi K2 Coding plan — OAuth-based provider with kimi-for-coding model. Inlined from pi-kimi-coder to eliminate deprecated @mariozechner/* transitive dependencies by making it an internal workspace package with updated peerDependencies scope.",
   "keywords": [
-    "pi-package",
-    "pi-extension",
+    "ai-provider",
     "kimi",
-    "moonshot",
     "kimi-coder",
-    "ai-provider"
+    "moonshot",
+    "pi-extension",
+    "pi-package"
   ],
-  "author": "picassio",
   "license": "MIT",
-  "pi": {
-    "extensions": [
-      "./extensions/index.ts"
-    ]
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-ai": "*"
-  },
+  "author": "picassio",
   "files": [
     "extensions/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  }
 }

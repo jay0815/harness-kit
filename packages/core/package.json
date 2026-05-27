@@ -13,31 +13,26 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "tsx scripts/test-e2e-direct.ts",
     "pi": "pi"
   },
   "dependencies": {
-    "@harness-kit/agent": "workspace:*",
     "@earendil-works/pi-agent-core": "^0.75.5",
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "^0.75.5",
+    "@harness-kit/agent": "workspace:*",
     "@harness-kit/kimi-coder": "workspace:*",
     "@sinclair/typebox": "catalog:",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
     "tsx": "^4.22.0",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "vite": "catalog:"
   }
 }

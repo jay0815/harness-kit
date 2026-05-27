@@ -2,22 +2,25 @@
   "name": "harness-kit",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter @harness-kit/agent run build && pnpm --filter @harness-kit/core run build",
-    "test": "pnpm -r --filter './packages/**' run test",
-    "lint": "pnpm -r --filter './packages/**' run lint",
-    "lint:fix": "pnpm -r --filter './packages/**' run lint:fix",
+    "build": "pnpm -r --filter './packages/**' --if-present --sort run build",
+    "test": "pnpm -r --filter './packages/**' --if-present --sort run test",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
     "lint:init": "oxlint --init",
-    "fmt": "pnpm -r --filter './packages/**' run fmt",
-    "fmt:check": "pnpm -r --filter './packages/**' run fmt:check",
+    "fmt": "oxfmt packages package.json tsconfig.json .oxlintrc.json .oxfmtrc.json",
+    "fmt:check": "oxfmt --check packages package.json tsconfig.json .oxlintrc.json .oxfmtrc.json",
     "fmt:init": "oxfmt --init",
-    "typecheck": "pnpm --filter @harness-kit/agent run typecheck && pnpm --filter @harness-kit/core run typecheck",
+    "typecheck": "pnpm -r --filter './packages/**' --if-present --sort run typecheck",
     "harness": "node packages/harness-agent/dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=20"
-  },
-  "devDependencies": {
-    "oxfmt": "^0.51.0",
-    "oxlint": "^1.66.0"
   }
 }

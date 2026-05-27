@@ -17,28 +17,13 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check ."
   },
   "dependencies": {
     "@earendil-works/pi-ai": "catalog:",
     "@sinclair/typebox": "catalog:"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
-  },
-  "peerDependencies": {
-    "@harness-kit/core": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@harness-kit/core": {
-      "optional": true
-    }
   }
 }
