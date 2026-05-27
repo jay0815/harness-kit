@@ -9,14 +9,15 @@ import type {
   TaskSummary,
   TokenUsage,
 } from "./types.js";
+import type { Api } from "@earendil-works/pi-ai";
 import { IterationBudget as IterationBudgetImpl, AGENT_B_TOKEN_THRESHOLD } from "./types.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { runAgentLoop } from "./agent-loop.js";
 
 export interface AgentBConfig {
-  model: Model<any>;
+  model: Model<Api>;
   workspaceDir: string;
-  tools: AgentTool<any>[];
+  tools: AgentTool[];
   streamFn: StreamFn;
   maxIterations?: number;
   tokenThreshold?: number; // default 0.9
@@ -64,13 +65,15 @@ export class AgentB {
   async execute(
     task: string,
     context: string,
-    emit: (event: { type: string; data: any }) => void,
+    emit: (event: { type: string; data: unknown }) => void,
   ): Promise<AgentBResult> {
     this.state.task = task;
     this.state.taskStatus = "running";
 
     const systemPrompt = this.buildSystemPrompt(task, context);
-    const initialMessages: AgentMessage[] = [{ role: "user", content: task } as any];
+    const initialMessages: AgentMessage[] = [
+      { role: "user", content: [{ type: "text", text: task }], timestamp: Date.now() },
+    ];
 
     try {
       const result = await runAgentLoop(
@@ -81,7 +84,7 @@ export class AgentB {
           tools: this.config.tools,
           contextWindow: 200_000,
           streamFn: this.config.streamFn,
-          convertToLlm: (msgs) => msgs as any,
+          convertToLlm: (msgs) => msgs as import("@earendil-works/pi-ai").Message[],
         },
         this.budget,
         this.pipeline,
@@ -163,8 +166,8 @@ Rules:
     if (typeof msg.content === "string") return msg.content;
     if (Array.isArray(msg.content)) {
       return msg.content
-        .filter((c: any) => c.type === "text")
-        .map((c: any) => c.text)
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
         .join("");
     }
     return "";
@@ -179,7 +182,7 @@ export async function runAgentB(
   agentB: AgentB,
   task: string,
   context: string,
-  emit: (event: { type: string; data: any }) => void,
+  emit: (event: { type: string; data: unknown }) => void,
 ): Promise<AgentBResult> {
   return agentB.execute(task, context, emit);
 }

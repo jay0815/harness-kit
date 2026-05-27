@@ -1,12 +1,13 @@
 import type { AgentAState, AgentTool, Model, StreamFn, TaskResult } from "./types.js";
+import type { Api } from "@earendil-works/pi-ai";
 import { createAgentB, runAgentB, type AgentBConfig } from "./agent-b.js";
 import { evaluateTaskWithSource } from "./evaluator.js";
 
 export interface AgentAConfig {
-  model: Model<any>;
-  assessmentModel?: Model<any>;
+  model: Model<Api>;
+  assessmentModel?: Model<Api>;
   workspaceDir: string;
-  tools: AgentTool<any>[];
+  tools: AgentTool[];
   streamFn: StreamFn;
   maxIterations?: number;
   tokenThreshold?: number; // default 0.9
@@ -34,7 +35,7 @@ export class AgentA {
    */
   async processHumanMessage(
     humanMessage: string,
-    emit: (event: { type: string; data: any }) => void,
+    emit: (event: { type: string; data: unknown }) => void,
   ): Promise<string> {
     // Step 1: LLM evaluation (context-isolated, single-turn)
     const result = await evaluateTaskWithSource(

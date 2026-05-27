@@ -3,14 +3,17 @@ import { runAgentLoop } from "./agent-loop.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";
 import type { AgentLoopConfig, AgentEvent, AgentTool, AgentToolResult } from "./types.js";
+import { cast, getProp, mockModel } from "./test-utils.js";
 
 function makeBudget(max = 10): IterationBudget {
   return new IterationBudget(max);
 }
 
-function mockStream(...responses: Array<{ content: any[]; stopReason?: string }>): any {
+function mockStream(
+  ...responses: Array<{ content: Array<Record<string, unknown>>; stopReason?: string }>
+): (...args: unknown[]) => Promise<{ result: () => Promise<Record<string, unknown>> }> {
   let callIndex = 0;
-  return async (_model: any, _ctx: any, _opts: any) => {
+  return async (_model: unknown, _ctx: unknown, _opts: unknown) => {
     const resp = responses[Math.min(callIndex++, responses.length - 1)];
     return {
       result: async () => ({
@@ -26,22 +29,26 @@ function mockStream(...responses: Array<{ content: any[]; stopReason?: string }>
 
 function makeTool(
   name: string,
-  handler: (id: string, args: any) => Promise<AgentToolResult<any>>,
-): AgentTool<any> {
+  handler: (id: string, args: unknown) => Promise<AgentToolResult<unknown>>,
+): AgentTool {
   return {
     name,
     label: name,
     description: name,
-    parameters: {} as any,
+    parameters: {} as import("@sinclair/typebox").TSchema,
     execute: handler,
   };
 }
 
-function textResult(text: string): AgentToolResult<any> {
+function textResult(text: string): AgentToolResult<unknown> {
   return { content: [{ type: "text" as const, text }], details: null };
 }
 
-function toolCallBlock(id: string, name: string, input: Record<string, unknown> = {}): any {
+function toolCallBlock(
+  id: string,
+  name: string,
+  input: Record<string, unknown> = {},
+): Record<string, unknown> {
   return { type: "toolCall" as const, id, name, input };
 }
 
@@ -51,14 +58,16 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "read_file", { path: "/test" })] },
-        { content: [{ type: "text", text: "Done reading." }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "read_file", { path: "/test" })] },
+          { content: [{ type: "text", text: "Done reading." }] },
+        ),
       ),
     };
 
@@ -67,13 +76,15 @@ describe("runAgentLoop", () => {
     });
 
     // messages should contain: assistant(toolCall) + tool result + final assistant text
-    const roles = result.messages.map((m: any) => m.role);
+    const roles = result.messages.map((m) => getProp<string>(m, "role"));
     expect(roles).toEqual(["assistant", "toolResult", "assistant"]);
 
     // Tool result message should have the file content
-    const toolMsg = result.messages[1] as any;
-    expect(toolMsg.toolCallId).toBe("tc1");
-    expect(toolMsg.content[0].text).toBe("file content");
+    const toolMsg = cast<Record<string, unknown>>(result.messages[1]);
+    expect(getProp(toolMsg, "toolCallId")).toBe("tc1");
+    expect(getProp<Array<Record<string, unknown>>>(toolMsg, "content")[0].text).toBe(
+      "file content",
+    );
   });
 
   it("supports multi-round tool calls", async () => {
@@ -85,15 +96,17 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "grep", { query: "foo" })] },
-        { content: [toolCallBlock("tc2", "grep", { query: "bar" })] },
-        { content: [{ type: "text", text: "Search complete." }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "grep", { query: "foo" })] },
+          { content: [toolCallBlock("tc2", "grep", { query: "bar" })] },
+          { content: [{ type: "text", text: "Search complete." }] },
+        ),
       ),
     };
 
@@ -103,7 +116,7 @@ describe("runAgentLoop", () => {
 
     // 3 LLM calls, 2 tool results, final text appended.
     expect(toolCallCount).toBe(2);
-    const roles = result.messages.map((m: any) => m.role);
+    const roles = result.messages.map((m) => getProp<string>(m, "role"));
     expect(roles).toEqual([
       "assistant",
       "toolResult", // round 1
@@ -120,14 +133,16 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "fail")] },
-        { content: [{ type: "text", text: "Sorry about that." }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "fail")] },
+          { content: [{ type: "text", text: "Sorry about that." }] },
+        ),
       ),
     };
 
@@ -136,25 +151,29 @@ describe("runAgentLoop", () => {
     });
 
     // Tool result should be marked as error
-    const toolMsg = result.messages[1] as any;
-    expect(toolMsg.isError).toBe(true);
-    expect(toolMsg.content[0].text).toContain("boom");
+    const toolMsg = cast<Record<string, unknown>>(result.messages[1]);
+    expect(getProp(toolMsg, "isError")).toBe(true);
+    expect(getProp<Array<Record<string, unknown>>>(toolMsg, "content")[0].text).toContain("boom");
 
     // Event should also reflect error
-    const endEvent = events.find((e) => e.type === "tool_execution_end") as any;
-    expect(endEvent.isError).toBe(true);
+    const endEvent = cast<Record<string, unknown> | undefined>(
+      events.find((e) => e.type === "tool_execution_end"),
+    );
+    expect(endEvent?.isError).toBe(true);
   });
 
   it("terminates on pure text response (no tool calls)", async () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: mockStream({ content: [{ type: "text", text: "Hello!" }] }),
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream({ content: [{ type: "text", text: "Hello!" }] }),
+      ),
     };
 
     const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => {
@@ -163,8 +182,10 @@ describe("runAgentLoop", () => {
 
     // Final text response should be appended to messages
     expect(result.messages).toHaveLength(1);
-    expect((result.messages[0] as any).role).toBe("assistant");
-    expect((result.messages[0] as any).content[0].text).toBe("Hello!");
+    expect(getProp<string>(result.messages[0], "role")).toBe("assistant");
+    expect(getProp<Array<Record<string, unknown>>>(result.messages[0], "content")[0].text).toBe(
+      "Hello!",
+    );
     expect(result.tokenUsage.totalTokens).toBe(150);
 
     const turnEnds = events.filter((e) => e.type === "turn_end");
@@ -176,15 +197,17 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "loop")] },
-        { content: [toolCallBlock("tc2", "loop")] },
-        { content: [toolCallBlock("tc3", "loop")] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "loop")] },
+          { content: [toolCallBlock("tc2", "loop")] },
+          { content: [toolCallBlock("tc3", "loop")] },
+        ),
       ),
     };
 
@@ -194,7 +217,7 @@ describe("runAgentLoop", () => {
     });
 
     // Should have made 2 rounds of tool calls
-    const toolMsgs = result.messages.filter((m: any) => m.role === "toolResult");
+    const toolMsgs = result.messages.filter((m) => getProp<string>(m, "role") === "toolResult");
     expect(toolMsgs).toHaveLength(2);
   });
 
@@ -205,20 +228,22 @@ describe("runAgentLoop", () => {
 
     let callCount = 0;
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
       signal: controller.signal,
-      streamFn: async (model: any, ctx: any, opts: any) => {
-        callCount++;
-        if (callCount === 2) controller.abort(); // Abort after first round
-        return mockStream(
-          { content: [toolCallBlock(`tc${callCount}`, "read_file")] },
-          { content: [{ type: "text", text: "done" }] },
-        )(model, ctx, opts);
-      },
+      streamFn: cast<import("./types.js").StreamFn>(
+        async (model: unknown, ctx: unknown, opts: unknown) => {
+          callCount++;
+          if (callCount === 2) controller.abort(); // Abort after first round
+          return mockStream(
+            { content: [toolCallBlock(`tc${callCount}`, "read_file")] },
+            { content: [{ type: "text", text: "done" }] },
+          )(model, ctx, opts);
+        },
+      ),
     };
 
     await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => {
@@ -233,12 +258,14 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: mockStream({ content: [{ type: "text", text: "Hello!" }] }),
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream({ content: [{ type: "text", text: "Hello!" }] }),
+      ),
     };
 
     const result = await runAgentLoop(config, makeBudget(), new MiddlewarePipeline(), (e) => {
@@ -246,23 +273,25 @@ describe("runAgentLoop", () => {
     });
 
     expect(result.messages).toHaveLength(1);
-    expect((result.messages[0] as any).content[0].text).toBe("Hello!");
+    expect(getProp<Array<Record<string, unknown>>>(result.messages[0], "content")[0].text).toBe(
+      "Hello!",
+    );
     expect(result.tokenUsage.inputTokens).toBe(100);
     expect(result.tokenUsage.outputTokens).toBe(50);
   });
 
   it("throws on stream.result() rejection", async () => {
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: (async () => ({
+      streamFn: cast<AgentLoopConfig["streamFn"]>(async () => ({
         result: async () => {
           throw new Error("stream failed");
         },
-      })) as any,
+      })),
     };
 
     await expect(
@@ -272,19 +301,19 @@ describe("runAgentLoop", () => {
 
   it("throws on error stopReason", async () => {
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: (async () => ({
+      streamFn: cast<AgentLoopConfig["streamFn"]>(async () => ({
         result: async () => ({
           content: [],
           stopReason: "error",
           errorMessage: "rate limited",
           usage: undefined,
         }),
-      })) as any,
+      })),
     };
 
     await expect(
@@ -294,18 +323,18 @@ describe("runAgentLoop", () => {
 
   it("throws on aborted stopReason", async () => {
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: (async () => ({
+      streamFn: cast<AgentLoopConfig["streamFn"]>(async () => ({
         result: async () => ({
           content: [],
           stopReason: "aborted",
           usage: undefined,
         }),
-      })) as any,
+      })),
     };
 
     await expect(
@@ -318,16 +347,20 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        {
-          content: [{ type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/f" } }],
-        },
-        { content: [{ type: "text", text: "done" }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          {
+            content: [
+              { type: "toolCall", id: "tc1", name: "read_file", arguments: { path: "/f" } },
+            ],
+          },
+          { content: [{ type: "text", text: "done" }] },
+        ),
       ),
     };
 
@@ -336,9 +369,11 @@ describe("runAgentLoop", () => {
     });
 
     // Tool should have received args with input field
-    const toolMsg = result.messages.find((m: any) => m.role === "toolResult");
+    const toolMsg = result.messages.find((m) => getProp<string>(m, "role") === "toolResult");
     expect(toolMsg).toBeDefined();
-    expect(JSON.parse((toolMsg as any).content[0].text)).toEqual({ path: "/f" });
+    expect(
+      JSON.parse(getProp<Array<Record<string, unknown>>>(toolMsg, "content")[0].text as string),
+    ).toEqual({ path: "/f" });
   });
 
   it("uses toolResult role with toolName and timestamp", async () => {
@@ -346,14 +381,16 @@ describe("runAgentLoop", () => {
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "grep", { query: "foo" })] },
-        { content: [{ type: "text", text: "done" }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "grep", { query: "foo" })] },
+          { content: [{ type: "text", text: "done" }] },
+        ),
       ),
     };
 
@@ -361,17 +398,19 @@ describe("runAgentLoop", () => {
       events.push(e);
     });
 
-    const toolResultMsg = result.messages.find((m: any) => m.role === "toolResult") as any;
+    const toolResultMsg = cast<Record<string, unknown> | undefined>(
+      result.messages.find((m) => getProp<string>(m, "role") === "toolResult"),
+    );
     expect(toolResultMsg).toBeDefined();
-    expect(toolResultMsg.toolCallId).toBe("tc1");
-    expect(toolResultMsg.toolName).toBe("grep");
-    expect(toolResultMsg.timestamp).toBeDefined();
-    expect(toolResultMsg.isError).toBe(false);
+    expect(toolResultMsg?.toolCallId).toBe("tc1");
+    expect(toolResultMsg?.toolName).toBe("grep");
+    expect(toolResultMsg?.timestamp).toBeDefined();
+    expect(toolResultMsg?.isError).toBe(false);
   });
 
   it("turn_end carries metadata snapshot on pure text response", async () => {
     const events: AgentEvent[] = [];
-    let stateMetadataRef: any = null;
+    let stateMetadataRef: Record<string, unknown> | null = null;
     const pipeline = new MiddlewarePipeline();
 
     // Register a middleware that writes metadata and captures the reference
@@ -386,28 +425,34 @@ describe("runAgentLoop", () => {
     });
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [],
       contextWindow: 200_000,
-      streamFn: mockStream({ content: [{ type: "text", text: "done" }] }),
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream({ content: [{ type: "text", text: "done" }] }),
+      ),
     };
 
     await runAgentLoop(config, makeBudget(), pipeline, (e) => {
       events.push(e);
     });
 
-    const turnEnd = events.find((e) => e.type === "turn_end") as any;
+    const turnEnd = cast<Record<string, unknown> | undefined>(
+      events.find((e) => e.type === "turn_end"),
+    );
     expect(turnEnd).toBeDefined();
-    expect(turnEnd.metadata).toBeDefined();
-    expect(turnEnd.metadata.test_key).toEqual({ value: "hello" });
+    expect(turnEnd?.metadata).toBeDefined();
+    expect(getProp<Record<string, unknown>>(turnEnd, "metadata").test_key).toEqual({
+      value: "hello",
+    });
 
     // Prove copy semantics: emitted metadata is NOT the same object as state.metadata
-    expect(turnEnd.metadata).not.toBe(stateMetadataRef);
+    expect(getProp(turnEnd, "metadata")).not.toBe(stateMetadataRef);
     // Mutating the emitted copy does not affect state.metadata
-    turnEnd.metadata.injected = true;
-    expect(stateMetadataRef.injected).toBeUndefined();
+    getProp<Record<string, unknown>>(turnEnd, "metadata").injected = true;
+    expect(getProp(stateMetadataRef, "injected")).toBeUndefined();
   });
 
   it("turn_end carries metadata snapshot after tool execution", async () => {
@@ -426,14 +471,16 @@ describe("runAgentLoop", () => {
     const tool = makeTool("read_file", async () => textResult("content"));
 
     const config: AgentLoopConfig = {
-      model: "test-model" as any,
+      model: mockModel("test-model"),
       systemPrompt: "test",
       messages: [],
       tools: [tool],
       contextWindow: 200_000,
-      streamFn: mockStream(
-        { content: [toolCallBlock("tc1", "read_file", { path: "/test" })] },
-        { content: [{ type: "text", text: "done" }] },
+      streamFn: cast<import("./types.js").StreamFn>(
+        mockStream(
+          { content: [toolCallBlock("tc1", "read_file", { path: "/test" })] },
+          { content: [{ type: "text", text: "done" }] },
+        ),
       ),
     };
 
@@ -441,10 +488,12 @@ describe("runAgentLoop", () => {
       events.push(e);
     });
 
-    const turnEnds = events.filter((e) => e.type === "turn_end") as any[];
+    const turnEnds = cast<Array<Record<string, unknown>>>(
+      events.filter((e) => e.type === "turn_end"),
+    );
     // Second turn_end (after tool execution) should carry metadata
     const lastTurnEnd = turnEnds[turnEnds.length - 1];
-    expect(lastTurnEnd.metadata).toBeDefined();
-    expect(lastTurnEnd.metadata.tool_run).toBe(true);
+    expect(lastTurnEnd?.metadata).toBeDefined();
+    expect(getProp<Record<string, unknown>>(lastTurnEnd, "metadata").tool_run).toBe(true);
   });
 });

@@ -43,15 +43,15 @@ export class FactVerificationMiddleware implements AgentMiddleware {
     }
 
     // tool-call turn 跳过 — LLM 返回工具调用时没有 <HK_RESULT>
-    const hasToolCalls = response.content.some((c: any) => c.type === "toolCall");
+    const hasToolCalls = response.content.some((c) => c.type === "toolCall");
     if (hasToolCalls) {
       return { action: "accept", response };
     }
 
     // 从 response content 提取文本
     const text = response.content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text ?? "")
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text)
       .join("");
 
     const block = extractResultBlock(text);

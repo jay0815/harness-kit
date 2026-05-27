@@ -3,40 +3,55 @@ import { registerFauxProvider, streamSimple } from "@earendil-works/pi-ai";
 import { runAgentLoop } from "./agent-loop.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";
-import type { AgentLoopConfig, AgentEvent, AgentTool, AgentToolResult } from "./types.js";
+import type {
+  AgentLoopConfig,
+  AgentEvent,
+  AgentTool,
+  AgentToolResult,
+  AgentMessage,
+} from "./types.js";
+import type { FauxResponseStep, AssistantMessage } from "@earendil-works/pi-ai";
+import { cast, getProp } from "./test-utils.js";
 
 function makeTool(
   name: string,
-  handler: (id: string, args: any) => Promise<AgentToolResult<any>>,
-): AgentTool<any> {
+  handler: (id: string, args: unknown) => Promise<AgentToolResult<unknown>>,
+): AgentTool {
   return {
     name,
     label: name,
     description: name,
-    parameters: {} as any,
+    parameters: {} as import("@sinclair/typebox").TSchema,
     execute: handler,
   };
 }
 
-function textResult(text: string): AgentToolResult<any> {
+function textResult(text: string): AgentToolResult<unknown> {
   return { content: [{ type: "text" as const, text }], details: null };
 }
 
-function fauxMsg(content: any[], usage = { input: 50, output: 20, cacheRead: 0 }): any {
-  return {
+function fauxMsg(
+  content: Array<Record<string, unknown>>,
+  usage = { input: 50, output: 20, cacheRead: 0 },
+): FauxResponseStep {
+  return cast<FauxResponseStep>({
     role: "assistant",
-    content,
+    content: cast<AssistantMessage["content"]>(content),
     api: "anthropic-messages",
     provider: "test",
     model: "test",
     usage,
     stopReason: "end_turn",
     timestamp: Date.now(),
-  };
+  });
 }
 
-function userMsg(text: string): any {
-  return { role: "user", content: [{ type: "text", text }], timestamp: Date.now() };
+function userMsg(text: string): AgentMessage {
+  return cast<AgentMessage>({
+    role: "user",
+    content: [{ type: "text", text }],
+    timestamp: Date.now(),
+  });
 }
 
 describe("registerFauxProvider integration", () => {
@@ -62,13 +77,15 @@ describe("registerFauxProvider integration", () => {
       }),
     ]);
 
-    const tool = makeTool("read_file", async (_id, args) => textResult(`content of ${args.path}`));
+    const tool = makeTool("read_file", async (_id, args) =>
+      textResult(`content of ${cast<Record<string, unknown>>(args).path}`),
+    );
     const events: AgentEvent[] = [];
 
     const config: AgentLoopConfig = {
       model,
       systemPrompt: "test",
-      messages: [userMsg("read the file")],
+      messages: [userMsg("read the file") as Extract<AgentMessage, { role: string }>],
       tools: [tool],
       contextWindow: 200_000,
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
@@ -83,16 +100,20 @@ describe("registerFauxProvider integration", () => {
       },
     );
 
-    const roles = result.messages.map((m: any) => m.role);
+    const roles = result.messages.map((m) => getProp<string>(m, "role"));
     expect(roles).toEqual(["user", "assistant", "toolResult", "assistant"]);
 
-    const toolMsg = result.messages[2] as any;
-    expect(toolMsg.role).toBe("toolResult");
-    expect(toolMsg.toolName).toBe("read_file");
-    expect(toolMsg.content[0].text).toBe("content of /test.txt");
+    const toolMsg = cast<Record<string, unknown>>(result.messages[2]);
+    expect(getProp<string>(toolMsg, "role")).toBe("toolResult");
+    expect(getProp<string>(toolMsg, "toolName")).toBe("read_file");
+    expect(getProp<Array<Record<string, unknown>>>(toolMsg, "content")[0].text).toBe(
+      "content of /test.txt",
+    );
 
-    const finalMsg = result.messages[3] as any;
-    expect(finalMsg.content[0].text).toContain("hello world");
+    const finalMsg = cast<Record<string, unknown>>(result.messages[3]);
+    expect(getProp<Array<Record<string, unknown>>>(finalMsg, "content")[0].text).toContain(
+      "hello world",
+    );
 
     expect(result.tokenUsage.inputTokens).toBeGreaterThan(0);
     expect(result.tokenUsage.outputTokens).toBeGreaterThan(0);
@@ -104,7 +125,7 @@ describe("registerFauxProvider integration", () => {
     const toolEnds = events.filter((e) => e.type === "tool_execution_end");
     expect(toolStarts).toHaveLength(1);
     expect(toolEnds).toHaveLength(1);
-    expect((toolEnds[0] as any).toolName).toBe("read_file");
+    expect(getProp<string>(toolEnds[0], "toolName")).toBe("read_file");
   });
 
   it("handles multiple rounds of tool calls", async () => {
@@ -134,7 +155,7 @@ describe("registerFauxProvider integration", () => {
     const config: AgentLoopConfig = {
       model,
       systemPrompt: "test",
-      messages: [userMsg("search")],
+      messages: [userMsg("search") as Extract<AgentMessage, { role: string }>],
       tools: [tool],
       contextWindow: 200_000,
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
@@ -148,7 +169,7 @@ describe("registerFauxProvider integration", () => {
     );
 
     expect(toolCallCount).toBe(2);
-    const roles = result.messages.map((m: any) => m.role);
+    const roles = result.messages.map((m) => getProp<string>(m, "role"));
     expect(roles).toEqual([
       "user",
       "assistant",
@@ -179,7 +200,7 @@ describe("registerFauxProvider integration", () => {
     const config: AgentLoopConfig = {
       model,
       systemPrompt: "test",
-      messages: [userMsg("do something")],
+      messages: [userMsg("do something") as Extract<AgentMessage, { role: string }>],
       tools: [tool],
       contextWindow: 200_000,
       streamFn: (m, ctx, opts) => streamSimple(m, ctx, opts),
@@ -192,9 +213,11 @@ describe("registerFauxProvider integration", () => {
       () => {},
     );
 
-    const toolMsg = result.messages[2] as any;
-    expect(toolMsg.role).toBe("toolResult");
-    expect(toolMsg.isError).toBe(true);
-    expect(toolMsg.content[0].text).toContain("tool broke");
+    const toolMsg = cast<Record<string, unknown>>(result.messages[2]);
+    expect(getProp<string>(toolMsg, "role")).toBe("toolResult");
+    expect(getProp<boolean>(toolMsg, "isError")).toBe(true);
+    expect(getProp<Array<Record<string, unknown>>>(toolMsg, "content")[0].text).toContain(
+      "tool broke",
+    );
   });
 });

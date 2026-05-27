@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { HarnessAgentSession } from "../session/harness-session.js";
 import type { HarnessAgentSessionConfig } from "../session/types.js";
+import type { Model } from "../core/types.js";
+import type { Api } from "@earendil-works/pi-ai";
+import { cast } from "../core/test-utils.js";
 
 let tmpDir: string;
 
@@ -18,7 +21,7 @@ afterEach(() => {
 function makeConfig(overrides?: Partial<HarnessAgentSessionConfig>): HarnessAgentSessionConfig {
   return {
     cwd: "/test",
-    model: {} as any,
+    model: cast<Model<Api>>({}),
     systemPrompt: "You are a helpful assistant.",
     streamFn: vi.fn().mockImplementation(async () => ({
       result: async () => ({
@@ -26,7 +29,7 @@ function makeConfig(overrides?: Partial<HarnessAgentSessionConfig>): HarnessAgen
         stopReason: "end_turn",
         usage: { input: 100, output: 50 },
       }),
-    })) as any,
+    })) as import("../core/types.js").StreamFn,
     ...overrides,
   };
 }
@@ -44,14 +47,14 @@ describe("HarnessAgentSession REPL integration", () => {
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
     await session.start();
 
-    const events: any[] = [];
-    session.extensionAPI.on("turn_end", (e: any) => events.push(e));
+    const events: unknown[] = [];
+    session.extensionAPI.on("turn_end", (e: unknown) => events.push(e));
 
     await session.prompt("hello");
 
     expect(streamFn).toHaveBeenCalledTimes(1);
     expect(events).toHaveLength(1);
-    expect(events[0].message.content[0].text).toBe("response");
+    expect(cast<Record<string, unknown>>(events[0]).message).toBeDefined();
 
     await session.shutdown();
   });

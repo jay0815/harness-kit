@@ -41,7 +41,7 @@ async function refreshKimiToken(refreshToken: string): Promise<KimiToken> {
       refresh_token: refreshToken,
     }),
   });
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as Record<string, unknown>;
   if (!response.ok)
     throw new Error(data.error_description || `Refresh failed (${response.status})`);
   return {

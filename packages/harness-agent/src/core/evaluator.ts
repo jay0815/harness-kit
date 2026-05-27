@@ -1,10 +1,11 @@
+import type { Api } from "@earendil-works/pi-ai";
 import type { Model, StreamFn } from "./types.js";
 import type { TaskEvaluation } from "./types.js";
 
 // ─── Config ───────────────────────────────────────────────────────
 
 export interface EvaluateTaskConfig {
-  model: Model<any>;
+  model: Model<Api>;
   streamFn: StreamFn;
   /** Reserved for future evaluator context/tool boundaries */
   workspaceDir: string;
@@ -178,7 +179,9 @@ export async function evaluateTaskWithSource(
   userMessage: string,
 ): Promise<TaskEvaluationWithSource> {
   // Context isolation boundary: only raw user string, no conversation history
-  const messages = [{ role: "user", content: [{ type: "text", text: userMessage }] }] as any[];
+  const messages = [
+    { role: "user", content: [{ type: "text", text: userMessage }], timestamp: Date.now() },
+  ] as import("@earendil-works/pi-ai").Message[];
 
   let text: string;
   try {
@@ -195,8 +198,8 @@ export async function evaluateTaskWithSource(
     }
 
     text = result.content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text ?? "")
+      .filter((c) => c.type === "text")
+      .map((c) => c.text ?? "")
       .join("");
   } catch (err) {
     return {

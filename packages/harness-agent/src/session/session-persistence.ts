@@ -6,7 +6,7 @@ interface PersistEntry {
   type: "session" | "message";
   id: string;
   timestamp: string;
-  message?: any;
+  message?: unknown;
 }
 
 /**
@@ -42,7 +42,7 @@ export class SessionPersistence {
   }
 
   /** Append a message in internal format */
-  appendMessage(message: any): void {
+  appendMessage(message: unknown): void {
     this.assertNotClosed();
     const entry: PersistEntry = {
       type: "message",
@@ -54,11 +54,11 @@ export class SessionPersistence {
   }
 
   /** Read all messages back. Returns empty array if file doesn't exist. */
-  getMessages(): any[] {
+  getMessages(): unknown[] {
     if (!existsSync(this.filePath)) return [];
 
     const content = readFileSync(this.filePath, "utf-8");
-    const messages: any[] = [];
+    const messages: unknown[] = [];
 
     for (const line of content.split("\n")) {
       if (!line.trim()) continue;

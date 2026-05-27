@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { AgentA, createAgentA } from "./agent-a.js";
 import type { Model } from "./types.js";
+import type { Api } from "@earendil-works/pi-ai";
+import { cast, mockModel } from "./test-utils.js";
 
-function makeModel(): Model<any> {
-  return { provider: "test", id: "test-model" } as any;
+function makeModel(): Model<Api> {
+  return mockModel("test-model");
 }
 
 function evaluationResponse(overrides?: Record<string, unknown>) {
@@ -23,17 +25,19 @@ function evaluationResponse(overrides?: Record<string, unknown>) {
 
 function makeEvalStreamFn(evalText: string, agentBText = "ok") {
   let callCount = 0;
-  return vi.fn().mockImplementation(async () => {
-    callCount++;
-    const text = callCount === 1 ? evalText : agentBText;
-    return {
-      result: async () => ({
-        content: [{ type: "text", text }],
-        stopReason: "end_turn",
-        usage: { input: 100, output: 50 },
-      }),
-    };
-  }) as any;
+  return cast<import("./types.js").StreamFn>(
+    vi.fn().mockImplementation(async () => {
+      callCount++;
+      const text = callCount === 1 ? evalText : agentBText;
+      return {
+        result: async () => ({
+          content: [{ type: "text", text }],
+          stopReason: "end_turn",
+          usage: { input: 100, output: 50 },
+        }),
+      };
+    }),
+  );
 }
 
 describe("AgentA", () => {
@@ -110,7 +114,7 @@ describe("AgentA", () => {
       model: makeModel(),
       workspaceDir: "/tmp",
       tools: [],
-      streamFn: streamFn as any,
+      streamFn: cast<import("./types.js").StreamFn>(streamFn),
     });
 
     const emit = vi.fn();

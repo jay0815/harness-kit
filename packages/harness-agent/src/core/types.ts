@@ -1,4 +1,5 @@
 import type {
+  Api,
   AssistantMessage,
   AssistantMessageEvent,
   ImageContent,
@@ -8,7 +9,6 @@ import type {
   streamSimple,
   TextContent,
   Tool,
-  ToolResultMessage,
 } from "@earendil-works/pi-ai";
 
 export type { Model } from "@earendil-works/pi-ai";
@@ -19,6 +19,8 @@ import type { Static, TSchema } from "@sinclair/typebox";
 export type StreamFn = (
   ...args: Parameters<typeof streamSimple>
 ) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
+
+export type StreamResult = Awaited<ReturnType<StreamFn>>;
 
 // ─── Tool Execution ────────────────────────────────────────────────
 
@@ -49,14 +51,14 @@ export interface AfterToolCallContext {
   assistantMessage: AssistantMessage;
   toolCall: AgentToolCall;
   args: unknown;
-  result: AgentToolResult<any>;
+  result: AgentToolResult<unknown>;
   isError: boolean;
   context: AgentContext;
 }
 
 export interface ShouldStopAfterTurnContext {
   message: AssistantMessage;
-  toolResults: ToolResultMessage[];
+  toolResults: AgentToolResult<unknown>[];
   context: AgentContext;
   newMessages: AgentMessage[];
 }
@@ -64,10 +66,10 @@ export interface ShouldStopAfterTurnContext {
 // ─── Agent Loop Config ─────────────────────────────────────────────
 
 export interface AgentLoopConfig extends SimpleStreamOptions {
-  model: Model<any>;
+  model: Model<Api>;
   systemPrompt: string;
   messages: AgentMessage[];
-  tools?: AgentTool<any>[];
+  tools?: AgentTool[];
   contextWindow?: number;
   streamFn: StreamFn;
   convertToLlm?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
@@ -101,10 +103,10 @@ export type AgentMessage = Message | CustomAgentMessages[keyof CustomAgentMessag
 
 export interface AgentState {
   systemPrompt: string;
-  model: Model<any>;
+  model: Model<Api>;
   thinkingLevel: ThinkingLevel;
-  set tools(tools: AgentTool<any>[]);
-  get tools(): AgentTool<any>[];
+  set tools(tools: AgentTool[]);
+  get tools(): AgentTool[];
   set messages(messages: AgentMessage[]);
   get messages(): AgentMessage[];
   readonly isStreaming: boolean;
@@ -122,11 +124,11 @@ export interface AgentToolResult<T> {
   isError?: boolean;
 }
 
-export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T>) => void;
+export type AgentToolUpdateCallback<T = unknown> = (partialResult: AgentToolResult<T>) => void;
 
 export interface AgentTool<
   TParameters extends TSchema = TSchema,
-  TDetails = any,
+  TDetails = unknown,
 > extends Tool<TParameters> {
   label: string;
   prepareArguments?: (args: unknown) => Static<TParameters>;
@@ -144,7 +146,7 @@ export interface AgentTool<
 export interface AgentContext {
   systemPrompt: string;
   messages: AgentMessage[];
-  tools?: AgentTool<any>[];
+  tools?: AgentTool[];
 }
 
 // ─── Agent Events ──────────────────────────────────────────────────
@@ -156,25 +158,25 @@ export type AgentEvent =
   | {
       type: "turn_end";
       message: AgentMessage;
-      toolResults: ToolResultMessage[];
+      toolResults: AgentToolResult<unknown>[];
       metadata?: Record<string, unknown>;
     }
   | { type: "message_start"; message: AgentMessage }
   | { type: "message_update"; message: AgentMessage; assistantMessageEvent: AssistantMessageEvent }
   | { type: "message_end"; message: AgentMessage }
-  | { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
+  | { type: "tool_execution_start"; toolCallId: string; toolName: string; args: unknown }
   | {
       type: "tool_execution_update";
       toolCallId: string;
       toolName: string;
-      args: any;
-      partialResult: any;
+      args: unknown;
+      partialResult: unknown;
     }
   | {
       type: "tool_execution_end";
       toolCallId: string;
       toolName: string;
-      result: any;
+      result: unknown;
       isError: boolean;
     };
 
@@ -222,13 +224,13 @@ export interface AgentMiddleware {
     state: RuntimeState,
     toolCall: AgentToolCall,
     tool: AgentTool | undefined,
-  ): Promise<AgentToolResult<any> | null>;
+  ): Promise<AgentToolResult<unknown> | null>;
   afterTool?(
     state: RuntimeState,
     toolCall: AgentToolCall,
     tool: AgentTool | undefined,
-    result: AgentToolResult<any>,
-  ): Promise<AgentToolResult<any>>;
+    result: AgentToolResult<unknown>,
+  ): Promise<AgentToolResult<unknown>>;
 }
 
 // Priority constants (lower = earlier execution)

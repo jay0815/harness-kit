@@ -7,7 +7,7 @@ import type { ToolDefinition, HarnessExtensionContext } from "./types.js";
  */
 export function adaptToolDefinition<
   TParams extends import("@sinclair/typebox").TSchema = import("@sinclair/typebox").TSchema,
-  TDetails = any,
+  TDetails = unknown,
 >(
   toolDef: ToolDefinition<TParams, TDetails>,
   ctxFactory: () => HarnessExtensionContext,
@@ -17,11 +17,13 @@ export function adaptToolDefinition<
     label: toolDef.label,
     description: toolDef.description,
     parameters: toolDef.parameters,
-    prepareArguments: toolDef.prepareArguments as any,
+    prepareArguments: toolDef.prepareArguments as (
+      args: unknown,
+    ) => import("@sinclair/typebox").Static<TParams>,
     executionMode: toolDef.executionMode,
     execute: async (
       toolCallId: string,
-      params: any,
+      params: unknown,
       signal?: AbortSignal,
       onUpdate?: (partialResult: AgentToolResult<TDetails>) => void,
     ): Promise<AgentToolResult<TDetails>> => {
@@ -38,11 +40,11 @@ export function adaptToolDefinition<
  * Registered tools override base tools with the same name.
  */
 export function mergeTools(
-  base: AgentTool<any>[],
-  registered: Map<string, ToolDefinition<any, any>>,
+  base: AgentTool[],
+  registered: Map<string, ToolDefinition>,
   ctxFactory: () => HarnessExtensionContext,
-): AgentTool<any>[] {
-  const merged = new Map<string, AgentTool<any>>();
+): AgentTool[] {
+  const merged = new Map<string, AgentTool>();
 
   for (const tool of base) {
     merged.set(tool.name, tool);

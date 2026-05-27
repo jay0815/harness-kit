@@ -6,6 +6,7 @@ import type {
   RuntimeState,
 } from "./types.js";
 import { PRIORITY_GUARD } from "./types.js";
+import { extractToolArgs } from "./tool-utils.js";
 
 export const CHANGE_TRACKER_KEY = "change_tracker";
 
@@ -71,8 +72,8 @@ export class ChangeTracker implements AgentMiddleware {
     state: RuntimeState,
     toolCall: AgentToolCall,
     _tool: AgentTool | undefined,
-    result: AgentToolResult<any>,
-  ): Promise<AgentToolResult<any>> {
+    result: AgentToolResult<unknown>,
+  ): Promise<AgentToolResult<unknown>> {
     // Only track relevant tools
     const isCode = CODE_MODIFYING_TOOLS.has(toolCall.name);
     const isVerify = this.isVerifyAttempt(toolCall);
@@ -117,7 +118,7 @@ export class ChangeTracker implements AgentMiddleware {
   private isVerifyAttempt(toolCall: AgentToolCall): boolean {
     if (toolCall.name === "verify" || toolCall.name === "VerifyCommand") return true;
     if (toolCall.name === "bash" || toolCall.name === "Bash") {
-      const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+      const args = extractToolArgs(toolCall);
       const command = String(args.command ?? "").trim();
       return isVerifyCommand(command);
     }
@@ -125,16 +126,16 @@ export class ChangeTracker implements AgentMiddleware {
   }
 
   private extractPath(toolCall: AgentToolCall): string | null {
-    const args = (toolCall as any).input ?? (toolCall as any).arguments ?? {};
+    const args = extractToolArgs(toolCall);
     const raw = args.path ?? args.file_path;
     const path = typeof raw === "string" ? raw.trim() : "";
     return path.length > 0 ? path : null;
   }
 
-  private extractError(result: AgentToolResult<any>): string {
+  private extractError(result: AgentToolResult<unknown>): string {
     const text = result.content
       .filter((c) => c.type === "text")
-      .map((c) => (c as any).text)
+      .map((c) => (c as { text: string }).text)
       .join("");
     return text.slice(0, 500);
   }

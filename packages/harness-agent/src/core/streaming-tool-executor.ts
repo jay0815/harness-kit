@@ -5,7 +5,7 @@ import type { RuntimeState } from "./types.js";
 export interface ToolExecutionResult {
   toolCallId: string;
   toolName: string;
-  result: AgentToolResult<any>;
+  result: AgentToolResult<unknown>;
   isError: boolean;
 }
 
@@ -35,7 +35,7 @@ export class StreamingToolExecutor {
    */
   async execute(
     toolCalls: AgentToolCall[],
-    tools: AgentTool<any>[],
+    tools: AgentTool[],
     state: RuntimeState,
     pipeline: MiddlewarePipeline,
     mode: ToolExecutionMode = "parallel",
@@ -48,7 +48,7 @@ export class StreamingToolExecutor {
 
   private async executeSequential(
     toolCalls: AgentToolCall[],
-    tools: AgentTool<any>[],
+    tools: AgentTool[],
     state: RuntimeState,
     pipeline: MiddlewarePipeline,
   ): Promise<ToolExecutionResult[]> {
@@ -64,7 +64,7 @@ export class StreamingToolExecutor {
 
   private async executeParallel(
     toolCalls: AgentToolCall[],
-    tools: AgentTool<any>[],
+    tools: AgentTool[],
     state: RuntimeState,
     pipeline: MiddlewarePipeline,
   ): Promise<ToolExecutionResult[]> {
@@ -101,7 +101,7 @@ export class StreamingToolExecutor {
 
   private async executeSingle(
     toolCall: AgentToolCall,
-    tools: AgentTool<any>[],
+    tools: AgentTool[],
     state: RuntimeState,
     pipeline: MiddlewarePipeline,
   ): Promise<ToolExecutionResult> {
@@ -119,11 +119,13 @@ export class StreamingToolExecutor {
     }
 
     // Execute
-    let result: AgentToolResult<any>;
+    let result: AgentToolResult<unknown>;
     try {
       if (!tool) throw new Error(`Tool not found: ${toolCall.name}`);
-      const args = (toolCall as any).input ?? (toolCall as any).arguments;
-      result = await tool.execute(toolCall.id, args);
+      const args =
+        (toolCall as { input?: unknown; arguments?: unknown }).input ??
+        (toolCall as { input?: unknown; arguments?: unknown }).arguments;
+      result = await tool.execute(toolCall.id, args as Parameters<typeof tool.execute>[1]);
     } catch (err) {
       result = {
         content: [

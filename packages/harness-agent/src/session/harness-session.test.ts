@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { Type } from "@sinclair/typebox";
 import { HarnessAgentSession } from "./harness-session.js";
 import type { HarnessAgentSessionConfig } from "./types.js";
+import { cast, getProp } from "../core/test-utils.js";
 
 let tmpDir: string;
 
@@ -19,7 +20,7 @@ afterEach(() => {
 function makeConfig(overrides?: Partial<HarnessAgentSessionConfig>): HarnessAgentSessionConfig {
   return {
     cwd: "/test",
-    model: {} as any,
+    model: cast<HarnessAgentSessionConfig["model"]>({}),
     systemPrompt: "You are a helpful assistant.",
     streamFn: vi.fn().mockImplementation(async () => ({
       result: async () => ({
@@ -27,12 +28,12 @@ function makeConfig(overrides?: Partial<HarnessAgentSessionConfig>): HarnessAgen
         stopReason: "end_turn",
         usage: { input: 100, output: 50 },
       }),
-    })) as any,
+    })) as HarnessAgentSessionConfig["streamFn"],
     ...overrides,
   };
 }
 
-function mockStreamFn(responseText: string, toolCalls: any[] = []) {
+function mockStreamFn(responseText: string, toolCalls: Array<Record<string, unknown>> = []) {
   return vi.fn().mockImplementation(async () => ({
     result: async () => ({
       content: [
@@ -55,10 +56,12 @@ describe("HarnessAgentSession", () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     const [event, ctx] = handler.mock.calls[0];
-    expect(event.type).toBe("session_start");
-    expect(event.reason).toBe("startup");
-    expect(ctx.cwd).toBe("/test");
-    expect(typeof ctx.shutdown).toBe("function");
+    const e = cast<Record<string, unknown>>(event);
+    const c = cast<Record<string, unknown>>(ctx);
+    expect(e.type).toBe("session_start");
+    expect(e.reason).toBe("startup");
+    expect(c.cwd).toBe("/test");
+    expect(typeof c.shutdown).toBe("function");
   });
 
   it("dispatches session_shutdown on shutdown", async () => {
@@ -74,9 +77,9 @@ describe("HarnessAgentSession", () => {
   });
 
   it("registerTool makes tool available during prompt", async () => {
-    let receivedTools: any[] | undefined;
-    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
-      receivedTools = ctx.tools;
+    let receivedTools: Array<Record<string, unknown>> | undefined;
+    const streamFn = vi.fn().mockImplementation(async (_model: unknown, ctx: unknown) => {
+      receivedTools = getProp<unknown>(ctx, "tools") as Array<Record<string, unknown>> | undefined;
       return {
         result: async () => ({
           content: [{ type: "text", text: "done" }],
@@ -99,25 +102,32 @@ describe("HarnessAgentSession", () => {
     await session.prompt("hello");
 
     expect(receivedTools).toBeDefined();
-    expect(receivedTools!.some((t: any) => t.name === "custom_tool")).toBe(true);
+    expect(
+      receivedTools!.some(
+        (t: Record<string, unknown>) => getProp<string | undefined>(t, "name") === "custom_tool",
+      ),
+    ).toBe(true);
   });
 
   it("before_agent_start handler modifies systemPrompt", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
-      capturedPrompt = ctx.systemPrompt;
-      return {
-        result: async () => ({
-          content: [{ type: "text", text: "ok" }],
-          stopReason: "end_turn",
-          usage: { input: 100, output: 50 },
-        }),
-      };
-    });
+    const streamFn = vi
+      .fn()
+      .mockImplementation(async (_model: unknown, ctx: Record<string, unknown>) => {
+        capturedPrompt = ctx.systemPrompt as string;
+        return {
+          result: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            stopReason: "end_turn",
+            usage: { input: 100, output: 50 },
+          }),
+        };
+      });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("before_agent_start", (event: any) => {
-      return { systemPrompt: event.systemPrompt + " EXTRA" };
+    session.extensionAPI.on("before_agent_start", (event: unknown) => {
+      const e = cast<Record<string, unknown>>(event);
+      return { systemPrompt: (e.systemPrompt as string) + " EXTRA" };
     });
 
     await session.start();
@@ -128,24 +138,28 @@ describe("HarnessAgentSession", () => {
 
   it("chains multiple before_agent_start handlers", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
-      capturedPrompt = ctx.systemPrompt;
-      return {
-        result: async () => ({
-          content: [{ type: "text", text: "ok" }],
-          stopReason: "end_turn",
-          usage: { input: 100, output: 50 },
-        }),
-      };
-    });
+    const streamFn = vi
+      .fn()
+      .mockImplementation(async (_model: unknown, ctx: Record<string, unknown>) => {
+        capturedPrompt = ctx.systemPrompt as string;
+        return {
+          result: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            stopReason: "end_turn",
+            usage: { input: 100, output: 50 },
+          }),
+        };
+      });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("before_agent_start", (event: any) => ({
-      systemPrompt: event.systemPrompt + " A",
-    }));
-    session.extensionAPI.on("before_agent_start", (event: any) => ({
-      systemPrompt: event.systemPrompt + " B",
-    }));
+    session.extensionAPI.on("before_agent_start", (event: unknown) => {
+      const e = cast<Record<string, unknown>>(event);
+      return { systemPrompt: (e.systemPrompt as string) + " A" };
+    });
+    session.extensionAPI.on("before_agent_start", (event: unknown) => {
+      const e = cast<Record<string, unknown>>(event);
+      return { systemPrompt: (e.systemPrompt as string) + " B" };
+    });
 
     await session.start();
     await session.prompt("hi");
@@ -155,21 +169,24 @@ describe("HarnessAgentSession", () => {
 
   it("supports async before_agent_start handlers", async () => {
     let capturedPrompt: string | undefined;
-    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
-      capturedPrompt = ctx.systemPrompt;
-      return {
-        result: async () => ({
-          content: [{ type: "text", text: "ok" }],
-          stopReason: "end_turn",
-          usage: { input: 100, output: 50 },
-        }),
-      };
-    });
+    const streamFn = vi
+      .fn()
+      .mockImplementation(async (_model: unknown, ctx: Record<string, unknown>) => {
+        capturedPrompt = ctx.systemPrompt as string;
+        return {
+          result: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            stopReason: "end_turn",
+            usage: { input: 100, output: 50 },
+          }),
+        };
+      });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("before_agent_start", async (event: any) => {
+    session.extensionAPI.on("before_agent_start", async (event: unknown) => {
+      const e = cast<Record<string, unknown>>(event);
       await new Promise((r) => setTimeout(r, 10));
-      return { systemPrompt: event.systemPrompt + " ASYNC" };
+      return { systemPrompt: (e.systemPrompt as string) + " ASYNC" };
     });
 
     await session.start();
@@ -179,14 +196,14 @@ describe("HarnessAgentSession", () => {
   });
 
   it("bridges toolCall to tool_use in turn_end event", async () => {
-    const turnEndEvents: any[] = [];
+    const turnEndEvents: Array<Record<string, unknown>> = [];
     const streamFn = mockStreamFn("I'll read it", [
       { id: "tc1", name: "read_file", input: { path: "/f" } },
     ]);
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("turn_end", (event: any) => {
-      turnEndEvents.push(event);
+    session.extensionAPI.on("turn_end", (event: unknown) => {
+      turnEndEvents.push(cast<Record<string, unknown>>(event));
     });
 
     await session.start();
@@ -194,8 +211,10 @@ describe("HarnessAgentSession", () => {
 
     expect(turnEndEvents.length).toBeGreaterThan(0);
     const lastTurn = turnEndEvents[turnEndEvents.length - 1];
-    expect(lastTurn.message.content[1].type).toBe("tool_use");
-    expect(lastTurn.message.content[1].name).toBe("read_file");
+    const lastMsg = cast<Record<string, unknown>>(getProp<unknown>(lastTurn, "message"));
+    const lastContent = cast<Array<Record<string, unknown>>>(getProp<unknown>(lastMsg, "content"));
+    expect(lastContent[1].type).toBe("tool_use");
+    expect(lastContent[1].name).toBe("read_file");
   });
 
   it("injects user message into queue via sendUserMessage", async () => {
@@ -264,12 +283,12 @@ describe("HarnessAgentSession", () => {
   });
 
   it("dispatches agent_end after all retries", async () => {
-    const agentEndEvents: any[] = [];
+    const agentEndEvents: Array<Record<string, unknown>> = [];
     const streamFn = mockStreamFn("done");
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("agent_end", (event: any) => {
-      agentEndEvents.push(event);
+    session.extensionAPI.on("agent_end", (event: unknown) => {
+      agentEndEvents.push(cast<Record<string, unknown>>(event));
     });
 
     await session.start();
@@ -344,12 +363,12 @@ describe("HarnessAgentSession", () => {
   });
 
   it("turn_start handler receives event with turnIndex", async () => {
-    const turnStartEvents: any[] = [];
+    const turnStartEvents: Array<Record<string, unknown>> = [];
     const streamFn = mockStreamFn("ok");
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("turn_start", (event: any) => {
-      turnStartEvents.push(event);
+    session.extensionAPI.on("turn_start", (event: unknown) => {
+      turnStartEvents.push(cast<Record<string, unknown>>(event));
     });
 
     await session.start();
@@ -362,7 +381,7 @@ describe("HarnessAgentSession", () => {
   });
 
   it("turnIndex does not reset on auto-retry", async () => {
-    const turnEndEvents: any[] = [];
+    const turnEndEvents: Array<unknown> = [];
     let callCount = 0;
 
     const streamFn = vi.fn().mockImplementation(async () => {
@@ -376,8 +395,8 @@ describe("HarnessAgentSession", () => {
     });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
-    session.extensionAPI.on("turn_end", (event: any) => {
-      turnEndEvents.push(event.turnIndex);
+    session.extensionAPI.on("turn_end", (event: unknown) => {
+      turnEndEvents.push(getProp<unknown>(event, "turnIndex"));
       callCount++;
       if (callCount === 1) {
         session.extensionAPI.sendUserMessage("retry");
@@ -429,13 +448,20 @@ describe("HarnessAgentSession", () => {
       .trim()
       .split("\n")
       .filter((l: string) => l.trim());
-    const entries = lines.map((l: string) => JSON.parse(l));
-    const messageEntries = entries.filter((e: any) => e.type === "message");
+    const entries = lines.map((l: string) => cast<Record<string, unknown>>(JSON.parse(l)));
+    const messageEntries = entries.filter((e) => e.type === "message");
 
     // Should have: user + assistant (round 1) + user (retry feedback) + assistant (round 2) = 4
     // NOT 6 (duplicates)
-    const userMsgs = messageEntries.filter((e: any) => e.message?.role === "user");
-    const assistantMsgs = messageEntries.filter((e: any) => e.message?.role === "assistant");
+    const userMsgs = messageEntries.filter(
+      (e) =>
+        cast<Record<string, unknown> | undefined>(getProp<unknown>(e, "message"))?.role === "user",
+    );
+    const assistantMsgs = messageEntries.filter(
+      (e) =>
+        cast<Record<string, unknown> | undefined>(getProp<unknown>(e, "message"))?.role ===
+        "assistant",
+    );
     expect(userMsgs.length).toBe(2);
     expect(assistantMsgs.length).toBe(2);
   });
@@ -562,18 +588,20 @@ describe("HarnessAgentSession", () => {
       resolveStarted = r;
     });
 
-    const streamFn = vi.fn().mockImplementation(async (_model: any, _ctx: any, opts: any) => {
-      capturedSignal = opts.signal;
-      resolveStarted();
-      await streamBlocker;
-      return {
-        result: async () => ({
-          content: [{ type: "text", text: "ok" }],
-          stopReason: "end_turn",
-          usage: { input: 100, output: 50 },
-        }),
-      };
-    });
+    const streamFn = vi
+      .fn()
+      .mockImplementation(async (_model: unknown, _ctx: unknown, opts: Record<string, unknown>) => {
+        capturedSignal = opts.signal as AbortSignal;
+        resolveStarted();
+        await streamBlocker;
+        return {
+          result: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            stopReason: "end_turn",
+            usage: { input: 100, output: 50 },
+          }),
+        };
+      });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn }));
     await session.start();
@@ -761,23 +789,25 @@ describe("assessment preflight", () => {
   });
 
   it("evaluation only sees raw user input, not session history", async () => {
-    let capturedEvalMessages: any[] = [];
+    let capturedEvalMessages: Array<Record<string, unknown>> = [];
     let callCount = 0;
 
-    const streamFn = vi.fn().mockImplementation(async (_model: any, ctx: any) => {
-      callCount++;
-      if (callCount === 1) {
-        // First call = evaluation — capture its messages
-        capturedEvalMessages = ctx.messages;
-      }
-      return {
-        result: async () => ({
-          content: [{ type: "text", text: callCount === 1 ? evaluationResponse() : "done" }],
-          stopReason: "end_turn",
-          usage: { input: 100, output: 50 },
-        }),
-      };
-    });
+    const streamFn = vi
+      .fn()
+      .mockImplementation(async (_model: unknown, ctx: Record<string, unknown>) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call = evaluation — capture its messages
+          capturedEvalMessages = ctx.messages as Array<Record<string, unknown>>;
+        }
+        return {
+          result: async () => ({
+            content: [{ type: "text", text: callCount === 1 ? evaluationResponse() : "done" }],
+            stopReason: "end_turn",
+            usage: { input: 100, output: 50 },
+          }),
+        };
+      });
 
     const session = new HarnessAgentSession(makeConfig({ streamFn, enableAssessment: true }));
 
@@ -787,7 +817,10 @@ describe("assessment preflight", () => {
     // Evaluation call should have exactly 1 message (the raw user input)
     // and NOT the session's accumulated history
     expect(capturedEvalMessages).toHaveLength(1);
-    expect(capturedEvalMessages[0].content[0].text).toBe("hello");
+    const firstMsgContent = cast<Array<Record<string, unknown>>>(
+      getProp<unknown>(capturedEvalMessages[0], "content"),
+    );
+    expect(firstMsgContent[0].text).toBe("hello");
   });
 
   it("source: model && understood continues to main loop", async () => {
@@ -889,8 +922,8 @@ describe("assessment preflight", () => {
     await session.prompt("hello");
 
     // messages should not contain the user text (clarification happened before push)
-    const messages = (session as any).messages;
-    const userMsgs = messages.filter((m: any) => m.role === "user");
+    const messages = cast<{ messages: Array<Record<string, unknown>> }>(session).messages;
+    const userMsgs = messages.filter((m) => m.role === "user");
     expect(userMsgs).toHaveLength(0);
   });
 });

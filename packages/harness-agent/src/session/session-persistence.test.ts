@@ -55,7 +55,10 @@ describe("SessionPersistence", () => {
     expect(messages[0]).toEqual(msg1);
     expect(messages[1]).toEqual(msg2);
     // toolCall format preserved (not converted to tool_use)
-    expect(messages[1].content[1].type).toBe("toolCall");
+    const msg2Content = (messages[1] as Record<string, unknown>).content as Array<
+      Record<string, unknown>
+    >;
+    expect(msg2Content[1].type).toBe("toolCall");
   });
 
   it("returns empty array for non-existent file", () => {
@@ -70,7 +73,7 @@ describe("SessionPersistence", () => {
 
     const messages = p.getMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe("user");
+    expect((messages[0] as Record<string, unknown>).role).toBe("user");
   });
 
   it("skips malformed lines", () => {
@@ -114,6 +117,6 @@ describe("SessionPersistence", () => {
 
     const messages = new SessionPersistence(dir, "test-7").getMessages();
     expect(messages[0]).toEqual(toolResult);
-    expect(messages[0].toolCallId).toBe("tc1");
+    expect((messages[0] as Record<string, unknown>).toolCallId).toBe("tc1");
   });
 });

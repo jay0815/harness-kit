@@ -7,6 +7,7 @@ import {
 } from "./middlewares.js";
 import { CHANGE_TRACKER_KEY } from "./change-tracker.js";
 import type { RuntimeState, AgentToolCall, AgentToolResult, LLMResponse } from "./types.js";
+import { mockToolCall, getProp } from "./test-utils.js";
 
 function makeState(tracker?: Record<string, unknown>): RuntimeState {
   return {
@@ -18,10 +19,10 @@ function makeState(tracker?: Record<string, unknown>): RuntimeState {
 }
 
 function makeToolCall(name: string, input?: Record<string, unknown>): AgentToolCall {
-  return { id: "tc_1", name, type: "toolCall", input } as any;
+  return mockToolCall(name, input);
 }
 
-function makeResult(text = "ok"): AgentToolResult<any> {
+function makeResult(text = "ok"): AgentToolResult<unknown> {
   return { content: [{ type: "text", text }], details: null };
 }
 
@@ -43,7 +44,7 @@ describe("VerificationGuidanceMiddleware", () => {
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
     expect(out.content).toHaveLength(2);
-    expect((out.content[1] as any).text).toContain("passed");
+    expect(getProp<string>(out.content[1], "text")).toContain("passed");
   });
 
   it("appends failure guidance after failing verify", async () => {
@@ -57,8 +58,8 @@ describe("VerificationGuidanceMiddleware", () => {
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
     expect(out.content).toHaveLength(2);
-    expect((out.content[1] as any).text).toContain("failed");
-    expect((out.content[1] as any).text).toContain("test broken");
+    expect(getProp<string>(out.content[1], "text")).toContain("failed");
+    expect(getProp<string>(out.content[1], "text")).toContain("test broken");
   });
 
   it("ignores non-verify tools", async () => {
@@ -83,8 +84,8 @@ describe("VerificationGuidanceMiddleware", () => {
     const result = makeResult("FAIL");
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
-    expect((out.content[1] as any).text).toContain("src/auth.ts");
-    expect((out.content[1] as any).text).toContain("src/middleware.ts");
+    expect(getProp<string>(out.content[1], "text")).toContain("src/auth.ts");
+    expect(getProp<string>(out.content[1], "text")).toContain("src/middleware.ts");
   });
 
   it("handles empty file list gracefully", async () => {
@@ -99,8 +100,8 @@ describe("VerificationGuidanceMiddleware", () => {
 
     const out = await mw.afterTool(state, makeToolCall("verify"), undefined, result);
     expect(out.content).toHaveLength(2);
-    expect((out.content[1] as any).text).toContain("failed");
-    expect((out.content[1] as any).text).not.toContain("Changed files:");
+    expect(getProp<string>(out.content[1], "text")).toContain("failed");
+    expect(getProp<string>(out.content[1], "text")).not.toContain("Changed files:");
   });
 
   it("detects verification commands from arguments.command", async () => {
@@ -113,16 +114,11 @@ describe("VerificationGuidanceMiddleware", () => {
     });
     const result = makeResult("FAIL");
 
-    const tc = {
-      id: "tc_1",
-      name: "Bash",
-      type: "toolCall",
-      arguments: { command: "pnpm run test" },
-    } as any;
+    const tc = mockToolCall("Bash", { command: "pnpm run test" });
     const out = await mw.afterTool(state, tc, undefined, result);
 
     expect(out.content).toHaveLength(2);
-    expect((out.content[1] as any).text).toContain("Verification failed");
+    expect(getProp<string>(out.content[1], "text")).toContain("Verification failed");
   });
 });
 
@@ -157,7 +153,7 @@ describe("ToolCallGuardrailMiddleware", () => {
     const result = await mw.beforeTool(state, makeToolCall("bash"), undefined);
     expect(result).not.toBeNull();
     expect(result!.isError).toBe(true);
-    expect((result!.content[0] as any).text).toContain("Blocked");
+    expect(getProp<string>(result!.content[0], "text")).toContain("Blocked");
   });
 
   it("resets failure count on success", async () => {
@@ -229,8 +225,8 @@ describe("QualityGateMiddleware", () => {
 
     const out = await mw.afterModel(state, response);
     expect(out.content).toHaveLength(1);
-    expect((out.content[0] as any).type).toBe("toolCall");
-    expect((out.content[0] as any).name).toBe("__quality_gate__");
+    expect(getProp<string>(out.content[0], "type")).toBe("toolCall");
+    expect(getProp<string>(out.content[0], "name")).toBe("__quality_gate__");
   });
 
   it("intercepts __quality_gate__ with file list", async () => {
@@ -246,9 +242,9 @@ describe("QualityGateMiddleware", () => {
 
     const result = await mw.beforeTool(state, makeToolCall("__quality_gate__"), undefined);
     expect(result).not.toBeNull();
-    expect((result!.content[0] as any).text).toContain("2 file(s)");
-    expect((result!.content[0] as any).text).toContain("src/auth.ts");
-    expect((result!.content[0] as any).text).toContain("src/utils.ts");
+    expect(getProp<string>(result!.content[0], "text")).toContain("2 file(s)");
+    expect(getProp<string>(result!.content[0], "text")).toContain("src/auth.ts");
+    expect(getProp<string>(result!.content[0], "text")).toContain("src/utils.ts");
   });
 
   it("uses fallback text when file list is empty", async () => {
@@ -261,7 +257,7 @@ describe("QualityGateMiddleware", () => {
 
     const result = await mw.beforeTool(state, makeToolCall("__quality_gate__"), undefined);
     expect(result).not.toBeNull();
-    expect((result!.content[0] as any).text).toContain("file paths were not captured");
+    expect(getProp<string>(result!.content[0], "text")).toContain("file paths were not captured");
   });
 
   it("does not inject twice (sentFeedback flag)", async () => {
@@ -294,7 +290,7 @@ describe("IntentGateMiddleware", () => {
 
     await mw.beforeModel(state);
     expect(state.context.messages).toHaveLength(1);
-    expect((state.context.messages[0] as any).content).toContain("plan");
+    expect(getProp<string>(state.context.messages[0], "content")).toContain("plan");
   });
 
   it("does not inject twice", async () => {

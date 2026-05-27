@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { StreamingToolExecutor } from "./streaming-tool-executor.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import type { AgentTool, AgentToolCall, RuntimeState } from "./types.js";
+import { cast, mockToolCall } from "./test-utils.js";
 
 function makeState(): RuntimeState {
   return {
@@ -13,20 +14,20 @@ function makeState(): RuntimeState {
 }
 
 function makeToolCall(id: string, name: string): AgentToolCall {
-  return { id, name, type: "toolCall" } as any;
+  return mockToolCall(name, undefined, id);
 }
 
 function makeTool(
   name: string,
-  handler?: (id: string, params: unknown) => Promise<any>,
-): AgentTool<any> {
-  return {
+  handler?: (id: string, params: unknown) => Promise<unknown>,
+): AgentTool {
+  return cast<AgentTool>({
     name,
     label: name,
     description: name,
-    parameters: {} as any,
+    parameters: cast<unknown>({}),
     execute: handler ?? (async () => ({ content: [{ type: "text", text: "ok" }], details: null })),
-  };
+  });
 }
 
 describe("StreamingToolExecutor", () => {

@@ -1,16 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 import { evaluateTask, evaluateTaskWithSource } from "./evaluator.js";
 import type { EvaluateTaskConfig } from "./evaluator.js";
+import { cast, getProp, mockModel } from "./test-utils.js";
 
 function makeConfig(overrides?: Partial<EvaluateTaskConfig>): EvaluateTaskConfig {
   return {
-    model: {} as any,
-    streamFn: vi.fn().mockImplementation(async () => ({
-      result: async () => ({
-        content: [{ type: "text", text: "{}" }],
-        stopReason: "end_turn",
-      }),
-    })) as any,
+    model: mockModel(),
+    streamFn: cast<import("./types.js").StreamFn>(
+      vi.fn().mockImplementation(async () => ({
+        result: async () => ({
+          content: [{ type: "text", text: "{}" }],
+          stopReason: "end_turn",
+        }),
+      })),
+    ),
     workspaceDir: "/tmp/test",
     ...overrides,
   };
@@ -191,7 +194,7 @@ describe("evaluateTask", () => {
     expect(result.understood).toBe(true);
     expect(result.taskOverview).toBe("Implement auth");
     // No source field — evaluateTask doesn't expose it
-    expect((result as any).source).toBeUndefined();
+    expect(getProp(result, "source")).toBeUndefined();
   });
 
   it("returns fallback evaluation on error", async () => {

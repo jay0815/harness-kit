@@ -2,7 +2,10 @@ export function turnStart(event: { turnIndex: number }): void {
   process.stdout.write(`\n── Turn ${event.turnIndex} ──\n`);
 }
 
-export function turnEnd(event: { message?: { content?: any[] }; toolResults?: any[] }): void {
+export function turnEnd(event: {
+  message?: { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+  toolResults?: Array<{ content?: Array<{ type: string; text?: string }>; isError?: boolean }>;
+}): void {
   const content = event.message?.content;
   if (!content || content.length === 0) {
     process.stdout.write("[empty response]\n");
@@ -21,14 +24,14 @@ export function turnEnd(event: { message?: { content?: any[] }; toolResults?: an
   }
 }
 
-export function toolStart(event: { toolName: string; args?: any }): void {
+export function toolStart(event: { toolName: string; args?: unknown }): void {
   const args = event.args ? JSON.stringify(event.args) : "";
   process.stdout.write(`  ⟶ ${event.toolName} ${args}\n`);
 }
 
 export function toolEnd(event: {
   toolName: string;
-  result?: { content?: any[]; isError?: boolean };
+  result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
   isError?: boolean;
 }): void {
   const isError = event.isError || event.result?.isError;
@@ -36,8 +39,8 @@ export function toolEnd(event: {
 
   const text =
     event.result?.content
-      ?.filter((c: any) => c.type === "text")
-      .map((c: any) => c.text)
+      ?.filter((c) => c.type === "text")
+      .map((c) => c.text)
       .join("\n") ?? "";
 
   if (text) {
@@ -48,6 +51,6 @@ export function toolEnd(event: {
   }
 }
 
-export function agentEnd(_event: { messages?: any[] }): void {
+export function agentEnd(_event: { messages?: Array<{ role: string; content: unknown }> }): void {
   process.stdout.write("\n[conversation complete]\n");
 }

@@ -1,3 +1,4 @@
+import type { Message, AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   AgentEvent,
   AgentMessage,
@@ -8,8 +9,10 @@ import type {
   LLMResponse,
   RuntimeState,
   TokenUsage,
+  StreamResult,
 } from "./types.js";
 import { MiddlewarePipeline } from "./middleware.js";
+import { extractToolArgs } from "./tool-utils.js";
 
 export interface AgentLoopResult {
   messages: AgentMessage[];
@@ -65,7 +68,7 @@ export async function runAgentLoop(
     // Convert to LLM messages
     const llmMessages = config.convertToLlm
       ? await config.convertToLlm(state.context.messages)
-      : (state.context.messages as any[]);
+      : (state.context.messages as Message[]);
 
     // LLM call
     const stream = await config.streamFn(
@@ -73,7 +76,7 @@ export async function runAgentLoop(
       {
         messages: llmMessages,
         systemPrompt: state.context.systemPrompt,
-        tools: state.context.tools as any,
+        tools: state.context.tools as import("@earendil-works/pi-ai").Tool[],
       },
       config,
     );
@@ -96,7 +99,7 @@ export async function runAgentLoop(
         role: "user",
         content: [{ type: "text", text: afterResult.feedback }],
         timestamp: Date.now(),
-      } as any);
+      } as AgentMessage);
       state.context.messages = messages;
       budget.refund();
       continue;
@@ -110,17 +113,15 @@ export async function runAgentLoop(
     const finalResponse = afterResult.response;
 
     // Check for tool calls
-    const toolCalls = finalResponse.content.filter(
-      (c: any) => c.type === "toolCall",
-    ) as AgentToolCall[];
+    const toolCalls = finalResponse.content.filter((c) => c.type === "toolCall") as AgentToolCall[];
 
     if (toolCalls.length === 0) {
       // Pure text response — append and end
-      messages.push({ role: "assistant", content: finalResponse.content } as any);
+      messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
       state.context.messages = messages;
       await emit({
         type: "turn_end",
-        message: { role: "assistant", content: finalResponse.content } as any,
+        message: { role: "assistant", content: finalResponse.content } as AgentMessage,
         toolResults: [],
         metadata: { ...state.metadata },
       });
@@ -131,7 +132,7 @@ export async function runAgentLoop(
     const toolResults = await executeToolCalls(toolCalls, config, state, pipeline, emit);
 
     // Append assistant message (with tool calls) and tool result messages
-    messages.push({ role: "assistant", content: finalResponse.content } as any);
+    messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
     for (let i = 0; i < toolCalls.length; i++) {
       messages.push({
         role: "toolResult",
@@ -141,22 +142,22 @@ export async function runAgentLoop(
         details: toolResults[i].details,
         isError: toolResults[i].isError ?? false,
         timestamp: Date.now(),
-      } as any);
+      } as AgentMessage);
     }
     state.context.messages = messages;
 
     await emit({
       type: "turn_end",
-      message: { role: "assistant", content: finalResponse.content } as any,
-      toolResults: toolResults as any,
+      message: { role: "assistant", content: finalResponse.content } as AgentMessage,
+      toolResults,
       metadata: { ...state.metadata },
     });
 
     // Check shouldStopAfterTurn
     if (config.shouldStopAfterTurn) {
       const shouldStop = await config.shouldStopAfterTurn({
-        message: finalResponse as any,
-        toolResults: toolResults as any,
+        message: { role: "assistant", content: finalResponse.content } as AssistantMessage,
+        toolResults,
         context: state.context,
         newMessages: messages,
       });
@@ -194,18 +195,19 @@ async function executeToolCalls(
   state: RuntimeState,
   pipeline: MiddlewarePipeline,
   emit: AsyncEmit,
-): Promise<AgentToolResult<any>[]> {
-  const results: AgentToolResult<any>[] = [];
+): Promise<AgentToolResult<unknown>[]> {
+  const results: AgentToolResult<unknown>[] = [];
   const tools = config.tools ?? [];
 
   for (const toolCall of toolCalls) {
     const tool = tools.find((t) => t.name === toolCall.name);
+    const args = extractToolArgs(toolCall);
 
     await emit({
       type: "tool_execution_start",
       toolCallId: toolCall.id,
       toolName: toolCall.name,
-      args: (toolCall as any).input ?? (toolCall as any).arguments,
+      args,
     });
 
     // before_tool chain
@@ -223,10 +225,9 @@ async function executeToolCalls(
     }
 
     // Execute tool
-    let result: AgentToolResult<any>;
+    let result: AgentToolResult<unknown>;
     try {
       if (!tool) throw new Error(`Tool not found: ${toolCall.name}`);
-      const args = (toolCall as any).input ?? (toolCall as any).arguments;
       result = await tool.execute(toolCall.id, args, config.signal);
     } catch (err) {
       result = {
@@ -257,8 +258,8 @@ async function executeToolCalls(
   return results;
 }
 
-async function collectStream(stream: any): Promise<LLMResponse> {
-  let msg: any;
+async function collectStream(stream: StreamResult): Promise<LLMResponse> {
+  let msg: AssistantMessage;
 
   try {
     msg = await stream.result();
@@ -271,9 +272,13 @@ async function collectStream(stream: any): Promise<LLMResponse> {
     throw new Error(`LLM response stopped: ${msg.stopReason}${detail}`);
   }
 
-  const content = msg.content.map((c: any) =>
-    c.type === "toolCall" ? { ...c, input: c.input ?? c.arguments } : c,
-  );
+  const content = msg.content.map((c) => {
+    if (c.type === "toolCall") {
+      const tc = c as unknown as Record<string, unknown>;
+      return { ...c, input: tc.input ?? tc.arguments };
+    }
+    return c;
+  });
 
   return {
     content,

@@ -52,7 +52,7 @@ export class MiddlewarePipeline {
     state: RuntimeState,
     toolCall: AgentToolCall,
     tool: AgentTool | undefined,
-  ): Promise<AgentToolResult<any> | null> {
+  ): Promise<AgentToolResult<unknown> | null> {
     for (const mw of this.middlewares) {
       if (mw.beforeTool) {
         const result = await mw.beforeTool(state, toolCall, tool);
@@ -66,8 +66,8 @@ export class MiddlewarePipeline {
     state: RuntimeState,
     toolCall: AgentToolCall,
     tool: AgentTool | undefined,
-    result: AgentToolResult<any>,
-  ): Promise<AgentToolResult<any>> {
+    result: AgentToolResult<unknown>,
+  ): Promise<AgentToolResult<unknown>> {
     let current = result;
     for (const mw of this.middlewares) {
       if (mw.afterTool) {

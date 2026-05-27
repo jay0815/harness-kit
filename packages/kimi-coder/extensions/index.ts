@@ -11,7 +11,7 @@
  * - Models: kimi-for-coding (powered by kimi-k2.6), kimi-k2.6, kimi-k2-thinking
  *
  * Usage:
- *   pi install /path/to/pi-kimi-coder
+ *   pi install @harness-kit/kimi-coder
  *   pi /login kimi-coder      # or skip if you already logged in with kimi-cli
  *   pi /model kimi-coder/kimi-for-coding
  */
@@ -19,10 +19,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type {
-  OAuthCredentials,
-  OAuthLoginCallbacks,
-} from "@earendil-works/pi-ai";
+import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // =============================================================================
@@ -35,12 +32,7 @@ const BASE_URL = "https://api.kimi.com/coding/v1";
 const PROVIDER_NAME = "kimi-coder";
 
 // Path where kimi-cli stores its OAuth credentials
-const KIMI_CLI_CREDENTIALS_PATH = path.join(
-  os.homedir(),
-  ".kimi",
-  "credentials",
-  "kimi-code.json"
-);
+const KIMI_CLI_CREDENTIALS_PATH = path.join(os.homedir(), ".kimi", "credentials", "kimi-code.json");
 
 // Path where pi stores OAuth credentials
 const PI_AUTH_PATH = path.join(os.homedir(), ".pi", "agent", "auth.json");
@@ -75,11 +67,10 @@ function saveKimiCliToken(token: KimiToken): void {
   try {
     const dir = path.dirname(KIMI_CLI_CREDENTIALS_PATH);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      KIMI_CLI_CREDENTIALS_PATH,
-      JSON.stringify(token),
-      { encoding: "utf-8", mode: 0o600 }
-    );
+    fs.writeFileSync(KIMI_CLI_CREDENTIALS_PATH, JSON.stringify(token), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
   } catch {
     // Silently fail
   }
@@ -97,7 +88,7 @@ function seedPiAuthFromKimiCli(): boolean {
   if (token.expires_at < Date.now() / 1000 + 60) return false;
 
   try {
-    let authData: Record<string, any> = {};
+    let authData: Record<string, unknown> = {};
 
     if (fs.existsSync(PI_AUTH_PATH)) {
       const raw = fs.readFileSync(PI_AUTH_PATH, "utf-8");
@@ -105,11 +96,14 @@ function seedPiAuthFromKimiCli(): boolean {
     }
 
     // Check if already seeded with a valid token
-    const existing = authData[PROVIDER_NAME];
+    const existing = authData[PROVIDER_NAME] as
+      | { type?: string; access?: string; expires?: number }
+      | undefined;
     if (
       existing &&
       existing.type === "oauth" &&
       existing.access &&
+      typeof existing.expires === "number" &&
       existing.expires > Date.now()
     ) {
       return true; // Already has valid credentials
@@ -150,37 +144,30 @@ interface DeviceAuthorization {
 }
 
 async function requestDeviceAuthorization(): Promise<DeviceAuthorization> {
-  const response = await fetch(
-    `${OAUTH_HOST}/api/oauth/device_authorization`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_id: KIMI_CODE_CLIENT_ID }),
-    }
-  );
+  const response = await fetch(`${OAUTH_HOST}/api/oauth/device_authorization`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: KIMI_CODE_CLIENT_ID }),
+  });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(
-      `Device authorization failed (${response.status}): ${text}`
-    );
+    throw new Error(`Device authorization failed (${response.status}): ${text}`);
   }
 
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as Record<string, unknown>;
   return {
     user_code: String(data.user_code),
     device_code: String(data.device_code),
-    verification_uri: String(data.verification_uri || ""),
+    verification_uri: String(data.verification_uri ?? ""),
     verification_uri_complete: String(data.verification_uri_complete),
-    expires_in: data.expires_in ? Number(data.expires_in) : null,
-    interval: Math.max(Number(data.interval || 5), 1),
+    expires_in: typeof data.expires_in === "number" ? Number(data.expires_in) : null,
+    interval: Math.max(Number(data.interval ?? 5), 1),
   };
 }
 
 async function pollForToken(auth: DeviceAuthorization): Promise<KimiToken> {
-  const maxAttempts = auth.expires_in
-    ? Math.ceil(auth.expires_in / auth.interval)
-    : 120;
+  const maxAttempts = auth.expires_in ? Math.ceil(auth.expires_in / auth.interval) : 120;
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((resolve) => setTimeout(resolve, auth.interval * 1000));
@@ -195,20 +182,20 @@ async function pollForToken(auth: DeviceAuthorization): Promise<KimiToken> {
       }),
     });
 
-    const data = (await response.json()) as any;
+    const data = (await response.json()) as Record<string, unknown>;
 
     if (response.status === 200 && data.access_token) {
-      const expiresIn = Number(data.expires_in || 3600);
+      const expiresIn = Number(data.expires_in ?? 3600);
       return {
         access_token: String(data.access_token),
         refresh_token: String(data.refresh_token),
         expires_at: Date.now() / 1000 + expiresIn,
-        scope: String(data.scope || "kimi-code"),
-        token_type: String(data.token_type || "Bearer"),
+        scope: String(data.scope ?? "kimi-code"),
+        token_type: String(data.token_type ?? "Bearer"),
       };
     }
 
-    const error = String(data.error || "");
+    const error = String(data.error ?? "");
     if (error === "expired_token") {
       throw new Error("Device code expired. Please try again.");
     }
@@ -229,21 +216,20 @@ async function refreshAccessToken(refreshToken: string): Promise<KimiToken> {
     }),
   });
 
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as Record<string, unknown>;
 
   if (!response.ok) {
-    throw new Error(
-      data.error_description || `Token refresh failed (${response.status})`
-    );
+    throw new Error(String(data.error_description ?? `Token refresh failed (${response.status})`));
   }
 
-  const expiresIn = Number(data.expires_in || 3600);
+  const expiresIn = Number(data.expires_in ?? 3600);
   return {
     access_token: String(data.access_token),
-    refresh_token: data.refresh_token ? String(data.refresh_token) : refreshToken,
+    refresh_token:
+      typeof data.refresh_token === "string" ? String(data.refresh_token) : refreshToken,
     expires_at: Date.now() / 1000 + expiresIn,
-    scope: String(data.scope || "kimi-code"),
-    token_type: String(data.token_type || "Bearer"),
+    scope: String(data.scope ?? "kimi-code"),
+    token_type: String(data.token_type ?? "Bearer"),
   };
 }
 
@@ -251,16 +237,10 @@ async function refreshAccessToken(refreshToken: string): Promise<KimiToken> {
 // Pi OAuth Adapter
 // =============================================================================
 
-async function loginKimiCoder(
-  callbacks: OAuthLoginCallbacks
-): Promise<OAuthCredentials> {
+async function loginKimiCoder(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
   // First, check if kimi-cli already has valid tokens
   const existing = loadKimiCliToken();
-  if (
-    existing &&
-    existing.access_token &&
-    existing.expires_at > Date.now() / 1000 + 60
-  ) {
+  if (existing && existing.access_token && existing.expires_at > Date.now() / 1000 + 60) {
     return {
       refresh: existing.refresh_token,
       access: existing.access_token,
@@ -290,9 +270,7 @@ async function loginKimiCoder(
   };
 }
 
-async function refreshKimiCoderToken(
-  credentials: OAuthCredentials
-): Promise<OAuthCredentials> {
+async function refreshKimiCoderToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
   // Also check disk — kimi-cli might have refreshed it already
   const diskToken = loadKimiCliToken();
   if (
@@ -443,10 +421,7 @@ export default function (pi: ExtensionAPI) {
           }
         } catch {
           if (ctx.hasUI) {
-            ctx.ui.notify(
-              "Kimi Coder: token refresh failed, use /login kimi-coder",
-              "warning"
-            );
+            ctx.ui.notify("Kimi Coder: token refresh failed, use /login kimi-coder", "warning");
           }
         }
       }
@@ -458,20 +433,23 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("agent_start", async () => {
     if (refreshInterval) return;
-    refreshInterval = setInterval(async () => {
-      const token = loadKimiCliToken();
-      if (!token || !token.refresh_token) return;
-      const remainingSecs = token.expires_at - Date.now() / 1000;
-      if (remainingSecs < 300) {
-        try {
-          const refreshed = await refreshAccessToken(token.refresh_token);
-          saveKimiCliToken(refreshed);
-          process.env.KIMI_CODER_API_KEY = refreshed.access_token;
-        } catch {
-          // Will retry next interval
+    refreshInterval = setInterval(
+      async () => {
+        const token = loadKimiCliToken();
+        if (!token || !token.refresh_token) return;
+        const remainingSecs = token.expires_at - Date.now() / 1000;
+        if (remainingSecs < 300) {
+          try {
+            const refreshed = await refreshAccessToken(token.refresh_token);
+            saveKimiCliToken(refreshed);
+            process.env.KIMI_CODER_API_KEY = refreshed.access_token;
+          } catch {
+            // Will retry next interval
+          }
         }
-      }
-    }, 10 * 60 * 1000);
+      },
+      10 * 60 * 1000,
+    );
   });
 
   pi.on("session_shutdown", async () => {

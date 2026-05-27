@@ -74,24 +74,24 @@ export async function startREPL(
       }
     }
 
-    session.extensionAPI.on("turn_start", (event: any) => {
-      output.turnStart(event);
+    session.extensionAPI.on("turn_start", (event: unknown) => {
+      output.turnStart(event as { turnIndex: number });
     });
 
-    session.extensionAPI.on("turn_end", (event: any) => {
-      output.turnEnd(event);
+    session.extensionAPI.on("turn_end", (event: unknown) => {
+      output.turnEnd(event as Parameters<typeof output.turnEnd>[0]);
     });
 
-    session.extensionAPI.on("tool_execution_start", (event: any) => {
-      output.toolStart(event);
+    session.extensionAPI.on("tool_execution_start", (event: unknown) => {
+      output.toolStart(event as Parameters<typeof output.toolStart>[0]);
     });
 
-    session.extensionAPI.on("tool_execution_end", (event: any) => {
-      output.toolEnd(event);
+    session.extensionAPI.on("tool_execution_end", (event: unknown) => {
+      output.toolEnd(event as Parameters<typeof output.toolEnd>[0]);
     });
 
-    session.extensionAPI.on("agent_end", (event: any) => {
-      output.agentEnd(event);
+    session.extensionAPI.on("agent_end", (event: unknown) => {
+      output.agentEnd(event as Parameters<typeof output.agentEnd>[0]);
     });
 
     await session.start();

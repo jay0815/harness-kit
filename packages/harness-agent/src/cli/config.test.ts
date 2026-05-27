@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { resolveConfig } from "./config.js";
 import type { ParsedArgs } from "./args.js";
+import { getProp } from "../core/test-utils.js";
 
 function makeArgs(overrides?: Partial<ParsedArgs>): ParsedArgs {
   return {
@@ -88,7 +89,7 @@ describe("resolveConfig", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     const config = resolveConfig(makeArgs());
     expect(config.model).toBeDefined();
-    expect((config.model as any).id).toBeDefined();
+    expect(getProp<unknown>(config.model, "id")).toBeDefined();
   });
 
   it("defaults verifyMode to strict when not provided", () => {

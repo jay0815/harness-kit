@@ -8,7 +8,8 @@ import {
   isVerifyCommand,
   CHANGE_TRACKER_KEY,
 } from "./change-tracker.js";
-import type { RuntimeState, AgentToolCall, AgentToolResult } from "./types.js";
+import type { RuntimeState, AgentToolResult } from "./types.js";
+import { cast, getProp, mockToolCall } from "./test-utils.js";
 
 function makeState(): RuntimeState {
   return {
@@ -19,11 +20,11 @@ function makeState(): RuntimeState {
   };
 }
 
-function makeToolCall(name: string, input?: Record<string, unknown>): AgentToolCall {
-  return { id: "tc_1", name, type: "toolCall", input } as any;
+function makeToolCall(name: string, input?: Record<string, unknown>) {
+  return mockToolCall(name, input);
 }
 
-function makeResult(text = "ok", isError = false): AgentToolResult<any> {
+function makeResult(text = "ok", isError = false): AgentToolResult<unknown> {
   return {
     content: [{ type: "text", text }],
     details: null,
@@ -42,7 +43,7 @@ describe("ChangeTracker", () => {
   it("increments codeGen on code-modifying tool", async () => {
     const state = makeState();
     await tracker.afterTool(state, makeToolCall("write_file"), undefined, makeResult());
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).codeGen).toBe(1);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "codeGen")).toBe(1);
   });
 
   it("does not increment codeGen on non-code tool", async () => {
@@ -66,12 +67,12 @@ describe("ChangeTracker", () => {
     const state = makeState();
     // First, make a code change
     await tracker.afterTool(state, makeToolCall("write_file"), undefined, makeResult());
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).codeGen).toBe(1);
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).verifiedGen).toBe(0);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "codeGen")).toBe(1);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "verifiedGen")).toBe(0);
 
     // Then verify
     await tracker.afterTool(state, makeToolCall("verify"), undefined, makeResult());
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).verifiedGen).toBe(1);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "verifiedGen")).toBe(1);
     expect(isLastVerifyOk(state)).toBe(true);
   });
 
@@ -86,7 +87,7 @@ describe("ChangeTracker", () => {
     // Verify failure updates lastVerifyOk/lastVerifyError but NOT verifiedGen
     expect(isLastVerifyOk(state)).toBe(false);
     expect(getLastVerifyError(state)).toContain("FAIL: test broken");
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).verifiedGen).toBe(0);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "verifiedGen")).toBe(0);
   });
 
   it("detects bash verify commands", async () => {
@@ -191,20 +192,12 @@ describe("file tracking", () => {
     );
 
     // Also test arguments fallback
-    const tc3 = {
-      id: "tc_3",
-      name: "edit_file",
-      type: "toolCall",
-      arguments: { path: "c.ts" },
-    } as any;
+    const tc3 = mockToolCall("edit_file", undefined, "tc_3");
+    cast<Record<string, unknown>>(tc3).arguments = { path: "c.ts" };
     await tracker.afterTool(state, tc3, undefined, makeResult());
 
-    const tc4 = {
-      id: "tc_4",
-      name: "Edit",
-      type: "toolCall",
-      arguments: { file_path: "d.ts" },
-    } as any;
+    const tc4 = mockToolCall("Edit", undefined, "tc_4");
+    cast<Record<string, unknown>>(tc4).arguments = { file_path: "d.ts" };
     await tracker.afterTool(state, tc4, undefined, makeResult());
 
     const files = getUnverifiedFiles(state);
@@ -250,7 +243,7 @@ describe("file tracking", () => {
 
     expect(getUnverifiedFiles(state)).toHaveLength(0);
     // codeGen should still be 4 (each call increments)
-    expect((state.metadata[CHANGE_TRACKER_KEY] as any).codeGen).toBe(4);
+    expect(getProp(state.metadata[CHANGE_TRACKER_KEY], "codeGen")).toBe(4);
   });
 
   it("returns unverified file after pathless change + verify + pathed change", async () => {
@@ -324,12 +317,8 @@ describe("file tracking", () => {
       makeResult(),
     );
 
-    const tc = {
-      id: "tc_1",
-      name: "Bash",
-      type: "toolCall",
-      arguments: { command: "pnpm run test" },
-    } as any;
+    const tc = mockToolCall("Bash", undefined, "tc_1");
+    cast<Record<string, unknown>>(tc).arguments = { command: "pnpm run test" };
     await tracker.afterTool(state, tc, undefined, makeResult());
 
     expect(isLastVerifyOk(state)).toBe(true);

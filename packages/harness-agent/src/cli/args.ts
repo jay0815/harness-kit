@@ -61,17 +61,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
         if (!Number.isFinite(num) || !Number.isInteger(num)) {
           throw new Error(`Flag ${arg} must be a number, got: ${value}`);
         }
-        (result as any)[def.key] = num;
+        (result as Record<keyof ParsedArgs, unknown>)[def.key] = num;
       } else if (def.key === "verify") {
         if (value !== "strict" && value !== "warn" && value !== "off") {
           throw new Error(`Flag ${arg} must be one of: strict, warn, off`);
         }
         result.verify = value;
       } else {
-        (result as any)[def.key] = value;
+        (result as Record<keyof ParsedArgs, unknown>)[def.key] = value;
       }
     } else {
-      (result as any)[def.key] = true;
+      (result as Record<keyof ParsedArgs, unknown>)[def.key] = true;
     }
 
     i++;

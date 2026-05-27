@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { MiddlewarePipeline } from "./middleware.js";
 import type { RuntimeState, LLMResponse, AgentToolCall, AgentToolResult } from "./types.js";
+import type { TextContent } from "@earendil-works/pi-ai";
 import { PRIORITY_GUARD, PRIORITY_EVAL } from "./types.js";
+import { cast, mockToolCall, getProp } from "./test-utils.js";
 
 function makeState(): RuntimeState {
   return {
@@ -17,10 +19,10 @@ function makeResponse(): LLMResponse {
 }
 
 function makeToolCall(name = "test"): AgentToolCall {
-  return { id: "tc_1", name, type: "toolCall" } as any;
+  return mockToolCall(name);
 }
 
-function makeToolResult(): AgentToolResult<any> {
+function makeToolResult(): AgentToolResult<unknown> {
   return { content: [{ type: "text", text: "ok" }], details: null };
 }
 
@@ -87,7 +89,7 @@ describe("MiddlewarePipeline", () => {
 
   it("beforeTool returns result to block", async () => {
     const pipeline = new MiddlewarePipeline();
-    const blocked: AgentToolResult<any> = {
+    const blocked: AgentToolResult<unknown> = {
       content: [{ type: "text", text: "blocked" }],
       details: null,
       isError: true,
@@ -105,11 +107,11 @@ describe("MiddlewarePipeline", () => {
 
   it("first beforeTool block wins", async () => {
     const pipeline = new MiddlewarePipeline();
-    const block1: AgentToolResult<any> = {
+    const block1: AgentToolResult<unknown> = {
       content: [{ type: "text", text: "block1" }],
       details: null,
     };
-    const block2: AgentToolResult<any> = {
+    const block2: AgentToolResult<unknown> = {
       content: [{ type: "text", text: "block2" }],
       details: null,
     };
@@ -136,7 +138,7 @@ describe("MiddlewarePipeline", () => {
       priority: 10,
       name: "a",
       afterTool: async (_s, _tc, _t, result) => {
-        result.content.push({ type: "text", text: "+a" } as any);
+        result.content.push(cast<TextContent>({ type: "text", text: "+a" }));
         return result;
       },
     });
@@ -144,7 +146,7 @@ describe("MiddlewarePipeline", () => {
       priority: 20,
       name: "b",
       afterTool: async (_s, _tc, _t, result) => {
-        result.content.push({ type: "text", text: "+b" } as any);
+        result.content.push(cast<TextContent>({ type: "text", text: "+b" }));
         return result;
       },
     });
@@ -225,7 +227,7 @@ describe("MiddlewarePipeline", () => {
 
     const result = await pipeline.runAfterModel(makeState(), makeResponse());
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toBe("fix it");
+    expect(getProp<string>(result, "feedback")).toBe("fix it");
     expect(secondFn).not.toHaveBeenCalled();
   });
 
@@ -246,7 +248,7 @@ describe("MiddlewarePipeline", () => {
 
     const result = await pipeline.runAfterModel(makeState(), makeResponse());
     expect(result.action).toBe("fail");
-    expect((result as any).reason).toBe("broken");
+    expect(getProp<string>(result, "reason")).toBe("broken");
     expect(secondFn).not.toHaveBeenCalled();
   });
 });

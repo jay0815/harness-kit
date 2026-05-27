@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { FactVerificationMiddleware, FACT_VERIFICATION_KEY } from "./fact-verification.js";
 import type { FactVerificationConfig } from "./fact-verification.js";
 import type { RuntimeState, LLMResponse } from "./types.js";
+import { cast, getProp } from "./test-utils.js";
 
 let tmpDir: string;
 
@@ -35,7 +36,14 @@ function textResponse(text: string): LLMResponse {
 
 function toolCallResponse(): LLMResponse {
   return {
-    content: [{ type: "toolCall", id: "tc1", name: "read_file", input: { path: "/test" } } as any],
+    content: [
+      cast<Extract<LLMResponse["content"][number], { type: "toolCall" }>>({
+        type: "toolCall",
+        id: "tc1",
+        name: "read_file",
+        input: { path: "/test" },
+      }),
+    ],
     stopReason: "end_turn",
   };
 }
@@ -79,7 +87,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toContain("No <HK_RESULT> block found");
+    expect(getProp(result, "feedback")).toContain("No <HK_RESULT> block found");
   });
 
   it("strict mode retries on empty facts", async () => {
@@ -89,7 +97,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toContain("no facts");
+    expect(getProp(result, "feedback")).toContain("no facts");
   });
 
   it("strict mode accepts on valid facts", async () => {
@@ -105,7 +113,7 @@ describe("FactVerificationMiddleware", () => {
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("accept");
     expect(state.metadata[FACT_VERIFICATION_KEY]).toBeDefined();
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("pass");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("pass");
   });
 
   it("strict mode retries on fact mismatch", async () => {
@@ -119,8 +127,8 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toContain("FAIL");
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("fail");
+    expect(getProp(result, "feedback")).toContain("FAIL");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("fail");
   });
 
   it("strict mode fails after max retries", async () => {
@@ -137,7 +145,7 @@ describe("FactVerificationMiddleware", () => {
     // Third attempt — exhausted
     result = await mw.afterModel(makeState(), textResponse("no block"));
     expect(result.action).toBe("fail");
-    expect((result as any).reason).toContain("max retries");
+    expect(getProp(result, "reason")).toContain("max retries");
   });
 
   it("maxRetries: 0 fails immediately", async () => {
@@ -163,7 +171,7 @@ describe("FactVerificationMiddleware", () => {
     const result = await mw.afterModel(state, textResponse("just text"));
     expect(result.action).toBe("accept");
     expect(state.metadata[FACT_VERIFICATION_KEY]).toBeDefined();
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("missing");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("missing");
   });
 
   it("warn mode writes metadata but does not block on empty facts", async () => {
@@ -172,7 +180,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, textResponse(hkResult([])));
     expect(result.action).toBe("accept");
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("empty");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("empty");
   });
 
   it("warn mode writes metadata on fact mismatch", async () => {
@@ -186,7 +194,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("accept");
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("fail");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("fail");
   });
 
   it("warn mode writes metadata on pass", async () => {
@@ -200,7 +208,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, response);
     expect(result.action).toBe("accept");
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("pass");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("pass");
   });
 
   it("metadata shape matches FactVerificationMetadata", async () => {
@@ -213,7 +221,7 @@ describe("FactVerificationMiddleware", () => {
     );
 
     await mw.afterModel(state, response);
-    const meta = state.metadata[FACT_VERIFICATION_KEY] as any;
+    const meta = cast<Record<string, unknown>>(state.metadata[FACT_VERIFICATION_KEY]);
     expect(meta).toHaveProperty("status");
     expect(meta).toHaveProperty("block");
     expect(meta).toHaveProperty("report");
@@ -238,7 +246,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, textResponse(blockWithInvalid));
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toContain("Invalid facts");
+    expect(getProp(result, "feedback")).toContain("Invalid facts");
   });
 
   it("warn mode writes metadata on warnings but does not block", async () => {
@@ -257,7 +265,7 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, textResponse(blockWithInvalid));
     expect(result.action).toBe("accept");
-    expect((state.metadata[FACT_VERIFICATION_KEY] as any).status).toBe("fail");
+    expect(getProp(state.metadata[FACT_VERIFICATION_KEY], "status")).toBe("fail");
   });
 
   it("strict retries on all-invalid facts (warnings, not empty)", async () => {
@@ -275,9 +283,9 @@ describe("FactVerificationMiddleware", () => {
 
     const result = await mw.afterModel(state, textResponse(allInvalid));
     expect(result.action).toBe("retry");
-    expect((result as any).feedback).toContain("Invalid facts");
+    expect(getProp(result, "feedback")).toContain("Invalid facts");
     // Should NOT say "no facts" — it's invalid, not empty
-    expect((result as any).feedback).not.toContain("no facts");
+    expect(getProp(result, "feedback")).not.toContain("no facts");
   });
 
   it("priority is finalizer (MAX_SAFE_INTEGER, runs after all other middleware)", () => {
@@ -290,10 +298,18 @@ describe("FactVerificationMiddleware", () => {
     const state = makeState();
 
     // Simulate QualityGate injecting a tool call into a text response
-    const toolCallResponse = {
+    const toolCallResponse: LLMResponse = {
       content: [
-        { type: "text", text: "done" },
-        { type: "toolCall", id: "qg1", name: "__quality_gate__", input: {} } as any,
+        cast<Extract<LLMResponse["content"][number], { type: "toolCall" }>>({
+          type: "text",
+          text: "done",
+        }),
+        cast<Extract<LLMResponse["content"][number], { type: "toolCall" }>>({
+          type: "toolCall",
+          id: "qg1",
+          name: "__quality_gate__",
+          input: {},
+        }),
       ],
       stopReason: "end_turn",
     };
@@ -336,7 +352,14 @@ describe("FactVerificationMiddleware", () => {
     };
 
     const toolCallResponse = {
-      content: [{ type: "toolCall", id: "tc1", name: "read_file", input: {} } as any],
+      content: [
+        cast<Extract<LLMResponse["content"][number], { type: "toolCall" }>>({
+          type: "toolCall",
+          id: "tc1",
+          name: "read_file",
+          input: {},
+        }),
+      ],
       stopReason: "end_turn",
     };
 

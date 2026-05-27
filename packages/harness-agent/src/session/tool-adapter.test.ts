@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Type } from "@sinclair/typebox";
 import { adaptToolDefinition, mergeTools } from "./tool-adapter.js";
 import type { ToolDefinition, HarnessExtensionContext } from "./types.js";
-import type { AgentTool } from "../core/types.js";
+import type { AgentTool, AgentToolResult } from "../core/types.js";
 
 function makeCtx(): HarnessExtensionContext {
   return { cwd: "/test", shutdown: () => {} };
@@ -70,7 +70,7 @@ describe("adaptToolDefinition", () => {
     });
 
     const tool = adaptToolDefinition(toolDef, makeCtx);
-    const coreUpdates: any[] = [];
+    const coreUpdates: AgentToolResult<unknown>[] = [];
     await tool.execute("tc1", { path: "/foo" }, undefined, (result) => {
       coreUpdates.push(result);
     });
@@ -104,7 +104,7 @@ describe("mergeTools", () => {
         name: "grep",
         label: "Grep",
         description: "Search",
-        parameters: {} as any,
+        parameters: {} as import("@sinclair/typebox").TSchema,
         execute: async () => ({ content: [], details: null }),
       },
     ];
@@ -129,7 +129,7 @@ describe("mergeTools", () => {
         name: "read_file",
         label: "Original",
         description: "Original",
-        parameters: {} as any,
+        parameters: {} as import("@sinclair/typebox").TSchema,
         execute: async () => ({
           content: [{ type: "text" as const, text: "original" }],
           details: null,

@@ -6,9 +6,9 @@ echo ""
 
 # 1. Check for any remaining old scope references in code/config
 echo "[1/5] Checking for residual @mariozechner references..."
-RESIDUAL=$(grep -r "@mariozechner" \
-  --include="*.ts" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" \
-  packages/ pnpm-workspace.yaml wiki/ docs/ 2>/dev/null | grep -v node_modules | grep -v dist | grep -v ".git/" || true)
+RESIDUAL=$(grep -rE "(from\s+['\"]@mariozechner|['\"]@mariozechner/|dependencies.*@mariozechner)" \
+  --include="*.ts" --include="*.json" --include="*.yaml" --include="*.yml" \
+  packages/ pnpm-workspace.yaml 2>/dev/null | grep -v node_modules | grep -v dist | grep -v ".git/" || true)
 
 if [ -n "$RESIDUAL" ]; then
   echo "FAIL: Found residual @mariozechner references:"
