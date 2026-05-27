@@ -4,6 +4,23 @@
 
 harness-kit 当前是 PI Extension，寄生在 PI 的 agent loop 上。PI 是黑盒：compaction 会丢失 harness 状态、auto-retry 绕过验证逻辑、循环终止决策权在 PI、无法在工具执行前做验证。用户决定构建自己的 agent runtime，复刻 pi-coding-agent 大部分代码，但加入 middleware 系统和更好的 compaction 策略。
 
+## 完成状态总览
+
+| Phase | 状态 | 说明 |
+|-------|------|------|
+| Phase 1: 双 Agent Loop + Middleware | **已完成** | agent-a, agent-b, agent-loop, middleware pipeline, streaming-tool-executor, change-tracker, 4 个基础 middleware |
+| Phase 2: Session 层 + ExtensionAPI | **已完成** | harness-session, event-bridge |
+| Phase 3: Standalone CLI | **已完成** | args, config, repl, output |
+| Phase 3: Compaction（wiki 部分） | **未实现** | 仅 `COMPACTION_THRESHOLD` 常量 + 空 `compaction/` 目录 |
+| Phase 4A: 最小 FactVerificationMiddleware | **已完成** | `fact-verification.ts`，strict/warn/off 三模式 + 重试 |
+| Phase 4B: Verification 模式 | **已完成** | CLI `--verify strict\|warn\|off`，默认 strict |
+| Phase 4C: Session middleware 注入 | **已完成** | `HarnessAgentSessionConfig.middlewares` + 自动注册 |
+| Phase 4D: 反馈质量与 ChangeTracker 增强 | **部分完成** | 文件路径已记录，缺变更摘要 |
+| Phase 5: Error Recovery + Planning | **未实现** | 零代码 |
+| Phase 6: 迁移 + 测试 | **未实现** | 依赖 Phase 3/5 完成 |
+| Agent A 评估重设计 | **已完成** | `evaluator.ts` LLM 评估替代关键词匹配 |
+| Subagent 调度 | **未实现** | 仅设计文档 |
+
 ## 关键决策（已确认）
 
 - **包位置**: harness-kit/packages/ 下新包（如 `packages/harness-agent`）
@@ -76,13 +93,15 @@ packages/harness-agent/
 └── tests/
 ```
 
-## Agent A 评估机制重设计
+## Agent A 评估机制重设计（已完成）
 
-### 现状问题
+### 现状问题（已解决）
 
-`agent-a.ts` 的 `assessInput()` 用关键词匹配做任务分类：
+~~`agent-a.ts` 的 `assessInput()` 用关键词匹配做任务分类~~：已替换为 `evaluator.ts` 中的 LLM 评估。
 
+旧实现已被移除：
 ```typescript
+// 已删除
 const isQuestion = lower.includes("?") || lower.startsWith("what") || ...
 const isTask = lower.includes("implement") || lower.includes("fix") || ...
 const isVague = input.length < 20 || lower === "help" || ...
@@ -174,13 +193,13 @@ const isVague = input.length < 20 || lower === "help" || ...
 
 主 agent 不需要重新理解用户意图，评估 agent 已经整理好了。
 
-### 实施步骤
+### 实施步骤（全部完成）
 
-1. 重写 `assessInput()` — 改为 LLM 调用，用结构化 prompt + JSON 输出
-2. 评估 agent 的 system prompt — 强调风险评估、任务分解
-3. 给评估 agent 注入工具 — read_file、list_files（只读）
-4. 更新测试 — 用 registerFauxProvider 测试评估逻辑
-5. 移除关键词匹配代码
+1. ~~重写 `assessInput()`~~ → `evaluateTaskWithSource()` in `evaluator.ts`，LLM 调用 + 结构化 JSON 输出
+2. ~~评估 agent 的 system prompt~~ → `ASSESSMENT_SYSTEM_PROMPT`，强调风险评估、任务分解
+3. ~~给评估 agent 注入工具~~ → 当前为 context-isolated 单轮调用（无工具），保守 fallback 兜底
+4. ~~更新测试~~ → 已有 evaluator 测试
+5. ~~移除关键词匹配代码~~ → 已移除
 
 ### 收益
 
@@ -194,11 +213,11 @@ const isVague = input.length < 20 || lower === "help" || ...
 
 ---
 
-## Subagent 调度设计
+## Subagent 调度设计（未实现）
 
 ### 现状
 
-"claude -p 作为 subagent" 是确定的方向，但只有方向没有具体设计。harness-kit 的核心价值之一是"给足上下文、限定范围、让 subagent 只执行一件事"，这需要一套完整的调度协议。
+"claude -p 作为 subagent" 是确定的方向，但只有方向没有具体设计。零代码，仅设计文档。harness-kit 的核心价值之一是"给足上下文、限定范围、让 subagent 只执行一件事"，这需要一套完整的调度协议。
 
 ### 待回答的问题
 
@@ -262,11 +281,11 @@ const isVague = input.length < 20 || lower === "help" || ...
 
 ---
 
-## pi-ai 解耦（优先级最低）
+## pi-ai 解耦（优先级最低，未实现）
 
 ### 现状
 
-agent runtime 深度依赖 `@earendil-works/pi-ai`：
+agent runtime 深度依赖 `@earendil-works/pi-ai`。未启动任何解耦工作。
 - `StreamFn` 类型签名直接继承自 `streamSimple`
 - `AssistantMessage` 结构（`ToolCall.arguments` vs `input`）渗透到 agent-loop、event-bridge、所有测试 mock
 - `Model`、`Message`、`Tool`、`ToolResultMessage` 等核心类型全部来自 pi-ai
@@ -297,9 +316,11 @@ agent runtime 深度依赖 `@earendil-works/pi-ai`：
 
 ## 实施步骤
 
-### Phase 1: 双 Agent Loop + Middleware（优先级最高）
+### Phase 1: 双 Agent Loop + Middleware（已完成）
 
 **目标**: 实现 Agent A (转述者) + Agent B (执行者) 的双 Agent 架构，集成 middleware pipeline
+
+**完成状态**: 全部完成。agent-a, agent-b, agent-loop, middleware pipeline, streaming-tool-executor, change-tracker, 4 个基础 middleware，58 个测试。
 
 #### Step 1.1: 定义类型系统
 
@@ -444,9 +465,11 @@ class ChangeTracker implements AgentMiddleware {
 - `QualityGateMiddleware` — 用 synthetic tool call 阻止未验证的完成
 - `IntentGateMiddleware` — 强制 LLM 先 verbalize 计划
 
-### Phase 2: Session 层（UI 兼容）
+### Phase 2: Session 层（UI 兼容）（已完成）
 
 **目标**: 实现与 PI AgentSession 接口兼容的 session 层，让 PI UI 层零修改即可使用
+
+**完成状态**: 全部完成。harness-session, event-bridge, 11 个 inline mock 测试迁移。
 
 #### Step 2.1: 实现 HarnessAgentSession
 
@@ -502,9 +525,15 @@ class HarnessAgentSession {
 - `context` — 允许 extension 修改 messages
 - `before_provider_request` / `after_provider_response`
 
-### Phase 3: Compaction — 动态上下文组装
+### Phase 3: Standalone CLI（已完成）
+
+**完成状态**: 全部完成。CLI 入口（args, config, repl, output），faux-integration 测试，agent-loop 修复，循环依赖解决。
+
+### Phase 3b: Compaction — 动态上下文组装（未实现）
 
 **核心理念**: LLM 智能够，缺的是与现实交互的工具。Compaction 不是"压缩摘要"，而是"动态组装最相关的上下文"。
+
+**完成状态**: 未实现。仅有 `COMPACTION_THRESHOLD = 0.75` 常量 + 空 `compaction/` 目录。
 
 **上下文组装公式** (适用于任何轮次):
 ```
@@ -646,9 +675,11 @@ wiki 格式化后可以跨 session 复用：
 - 新 session 启动时注入 relevant knowledge
 - 参考 prax-agent 的 `MemoryBackend` 置信度评分机制
 
-### Phase 4: 硬事实校验下沉为默认闭环
+### Phase 4: 硬事实校验下沉为默认闭环（基本完成）
 
 **目标**: 让 harness-agent 默认成为"会验证自己声明文件事实的 coding agent"，而不是"可动态加载验证扩展的普通 agent CLI"。
+
+**完成状态**: 4A/4B/4C 已完成，4D 部分完成（ChangeTracker 记录文件路径，缺变更摘要）。
 
 **原则**: 通过牺牲速度换取准确性。不扩展 runtime 能力面，只兑现一个核心 middleware。
 
@@ -669,31 +700,37 @@ wiki 格式化后可以跨 session 复用：
 4. **`--verify strict|warn|off`** — 独立于 `--no-extension`，校验是核心能力不是扩展附庸
 5. **PI compatibility 不渗透到新 middleware** — 使用 harness-agent native 结构
 
-#### Step 4A: 最小 FactVerificationMiddleware
+#### Step 4A: 最小 FactVerificationMiddleware ✅
 
-- afterModel 解析 `<HK_RESULT>`，PASS/missing/FAIL 分别处理
-- missing/FAIL → retry feedback，超过 `maxVerificationRetries` → fail
-- CLI 默认启用 strict 模式
+- afterModel 解析 `<HK_RESULT>`，PASS/missing/FAIL 分别处理 ✅
+- missing/FAIL → retry feedback，超过 `maxVerificationRetries` → fail ✅
+- CLI 默认启用 strict 模式 ✅
+- 实现: `fact-verification.ts`, `result-block.ts`, `verify.ts`, `verify-types.ts`
 
-#### Step 4B: Verification 模式
+#### Step 4B: Verification 模式 ✅
 
-- `strict`（默认）：缺失/失败阻塞完成
-- `warn`：提示但不阻塞
-- `off`：debug/bare mode
+- `strict`（默认）：缺失/失败阻塞完成 ✅
+- `warn`：提示但不阻塞 ✅
+- `off`：debug/bare mode ✅
+- 实现: `args.ts` `--verify` flag, `config.ts` default strict
 
-#### Step 4C: Session 支持 middleware 注入
+#### Step 4C: Session 支持 middleware 注入 ✅
 
-- `HarnessAgentSessionConfig` 增加 `middlewares?: AgentMiddleware[]`
-- CLI 默认注册 FactVerificationMiddleware
-- core extension 不再通过 `turn_end` hack 独占校验闭环
+- `HarnessAgentSessionConfig` 增加 `middlewares?: AgentMiddleware[]` ✅
+- CLI 默认注册 FactVerificationMiddleware ✅
+- core extension 不再通过 `turn_end` hack 独占校验闭环 ✅
+- 实现: `session/types.ts`, `harness-session.ts` auto-registration
 
-#### Step 4D: 反馈质量与 ChangeTracker 增强
+#### Step 4D: 反馈质量与 ChangeTracker 增强（部分完成）
 
-- 记录文件路径、变更摘要
-- feedback 引用具体失败事实
-- 后续可接 QualityGate / ChangeTracker single-writer
+- 记录文件路径 ✅ — `ChangeEntry {generation, toolName, path}`
+- 记录变更摘要 ❌ — 无 diff 内容或描述
+- feedback 引用具体失败事实 ✅ — `VerificationGuidanceMiddleware` 注入引导消息
+- 后续可接 QualityGate / ChangeTracker single-writer ✅ — `QualityGateMiddleware` 已消费 ChangeTracker
 
-### Phase 5: Error Recovery + Planning（借鉴 prax-agent）
+### Phase 5: Error Recovery + Planning（未实现）
+
+**完成状态**: 未实现。零代码。
 
 #### Step 4.1: 结构化错误恢复
 
@@ -723,7 +760,9 @@ enum RecoveryAction {
 - `depends_on` 边缘 → 拓扑排序 → 执行顺序
 - 失败时降级到静态模板
 
-### Phase 6: 迁移 + 测试
+### Phase 6: 迁移 + 测试（未实现）
+
+**完成状态**: 未实现。依赖 Phase 3b (Compaction) 和 Phase 5 (Error Recovery) 完成。
 
 #### Step 5.1: 迁移 harness-kit extension
 
