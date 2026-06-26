@@ -4,7 +4,8 @@
   "description": "Coding agent harness - orchestrates multi-agent workflows with hard fact verification",
   "bin": {
     "harness-telemetry": "bin/harness-telemetry",
-    "harness-verify": "bin/harness-verify"
+    "harness-verify": "bin/harness-verify",
+    "harness-kit": "bin/harness-kit"
   },
   "type": "module",
   "main": "dist/index.js",
