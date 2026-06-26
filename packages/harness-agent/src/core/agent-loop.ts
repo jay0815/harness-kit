@@ -132,22 +132,7 @@ export async function runAgentLoop(
     const toolResults = await executeToolCalls(toolCalls, config, state, pipeline, emit);
 
     // Check terminate flag — any tool can request loop termination
-    if (toolResults.some((r) => r.terminate)) {
-      messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
-      for (let i = 0; i < toolCalls.length; i++) {
-        messages.push({
-          role: "toolResult",
-          toolCallId: toolCalls[i].id,
-          toolName: toolCalls[i].name,
-          content: toolResults[i].content,
-          details: toolResults[i].details,
-          isError: toolResults[i].isError ?? false,
-          timestamp: Date.now(),
-        } as AgentMessage);
-      }
-      state.context.messages = messages;
-      break;
-    }
+    const shouldTerminate = toolResults.some((r) => r.terminate);
 
     // Append assistant message (with tool calls) and tool result messages
     messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
@@ -170,6 +155,8 @@ export async function runAgentLoop(
       toolResults,
       metadata: { ...state.metadata },
     });
+
+    if (shouldTerminate) break;
 
     // Check shouldStopAfterTurn
     if (config.shouldStopAfterTurn) {
