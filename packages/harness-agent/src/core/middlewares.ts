@@ -147,7 +147,9 @@ export class QualityGateMiddleware implements AgentMiddleware {
       type: "toolCall" as const,
       id: `quality_gate_${Date.now()}`,
       name: "__quality_gate__",
-      arguments: { message: "You have unverified code changes. Run verification before finishing." },
+      arguments: {
+        message: "You have unverified code changes. Run verification before finishing.",
+      },
     } satisfies Extract<AssistantMessage["content"][number], { type: "toolCall" }>);
 
     return response;

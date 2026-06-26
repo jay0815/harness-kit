@@ -280,3 +280,131 @@
 - pnpm install 无 `@mariozechner` 警告
 - lockfile 中 `@mariozechner` 引用清零
 - packages/core 通过 `workspace:*` 依赖 `@harness-kit/kimi-coder`
+
+## [2026-06-26] feat | Phase 3b: Compaction — 动态上下文组装
+
+**Phase 3b 完成**，实现 compaction 机制，当 token 使用量达到阈值时自动压缩上下文。
+
+### 核心模块
+
+- `ContextEngine` 抽象类 — `shouldCompact/compact/searchMemory/getWikiSummary`
+- `WikiContextEngine` — 默认实现，阈值触发、保留最近 N 轮、异步 wiki 生成
+- `WikiGenerator` — LLM 驱动的 wiki 生成 + 评分 + 重试（遵循 evaluator.ts 模式）
+- `CompactionMiddleware` — `beforeModel` hook，priority=PRIORITY_GUARD-5，自动触发
+
+### Session 集成
+
+- `HarnessAgentSessionConfig` 增加 `contextEngine` 字段
+- 自动注册 `CompactionMiddleware`
+- Wiki summary 注入 system prompt（`## Project Memory`）
+- 注册 `search_memory` 工具，LLM 可按需检索历史记忆
+
+### 存储
+
+- `.harness-kit/wiki/{timestamp}.json` — 项目级 wiki，所有 session 共享
+- WikiEntry 结构：projectGoals, completedWork, keyDecisions, fileChanges, problemsAndSolutions, unfinishedTasks
+
+### 测试
+
+- 3 个测试文件，23 个新测试
+- 总计 298 + 79 = 377 个测试全部通过
+
+## [2026-06-26] feat | Phase 4D: ChangeTracker 变更摘要
+
+**Phase 4D 完成**，ChangeTracker 现在记录每次代码变更的语义摘要。
+
+### 实现
+
+- `ChangeEntry` 增加 `summary` 字段
+- `write_file`: 行数 + 内容预览（`write 3L: line 1\nline 2…`）
+- `edit_file`: 旧/新文本片段（`edit "foo" → "bar"`）
+- `delete_file`: `deleted` 标记
+- `extractSummary()` 方法从 tool call 参数提取摘要
+
+### 测试
+
+- 5 个新测试覆盖 write/edit/delete/empty 场景
+- 总计 303 + 79 = 382 个测试全部通过
+
+## [2026-06-26] feat | Phase 5: Error Recovery — 结构化错误分类 + 恢复策略
+
+**Phase 5 完成**，实现结构化错误恢复层。
+
+### 核心模块
+
+- `ErrorType` 枚举 — 7 种错误类型（TOOL_ERROR, MODEL_ERROR, TIMEOUT, PERMISSION_DENIED, RESOURCE_EXHAUSTED, PARSE_ERROR, UNKNOWN）
+- `RecoveryAction` 枚举 — 7 种恢复策略（RETRY_SAME, SWITCH_TOOL, UPGRADE_MODEL, REDUCE_SCOPE, SKIP_ITEM, WAIT_AND_RETRY, ABORT）
+- `classifyError()` — 从错误消息模式匹配推断类型（ECONNRESET→TIMEOUT, 429→RESOURCE_EXHAUSTED 等）
+- `decideRecovery()` — 策略引擎，根据错误类型 + 历史记录决定恢复动作
+- `ErrorRecoveryMiddleware` — afterTool hook，自动分类错误并应用恢复策略
+
+### 恢复策略逻辑
+
+- 首次 TOOL_ERROR → RETRY_SAME
+- 同工具 3 次失败 → SWITCH_TOOL + 黑名单
+- TIMEOUT → WAIT_AND_RETRY（指数退避）
+- RESOURCE_EXHAUSTED → WAIT_AND_RETRY（长退避）
+- PERMISSION_DENIED → ABORT
+- PARSE_ERROR → REDUCE_SCOPE
+- 连续 5 次 UNKNOWN → ABORT
+
+### Session 集成
+
+- `HarnessAgentSessionConfig` 增加 `errorRecovery` 配置
+- 自动注册 `ErrorRecoveryMiddleware`
+
+### 测试
+
+- 3 个测试文件，37 个新测试
+- 总计 340 + 79 = 419 个测试全部通过
+
+## [2026-06-27] fix | 架构限制修复：backoff + searchMemory scope + WorkflowRunner executor
+
+修复 code review 发现的 3 个架构限制。
+
+### 1. Backoff 延迟机制
+
+- `AgentToolResult` 增加 `backoffMs?: number` 字段
+- `ErrorRecoveryMiddleware` 设置 `result.backoffMs = decision.backoffMs`
+- `agent-loop.ts` 工具执行后检查 max backoffMs，`await sleep(backoffMs)`
+- rate-limit（429）和资源耗尽时，agent 会实际等待退避时间
+
+### 2. searchMemory scope 访问对话历史
+
+- `ContextEngine` 增加抽象方法 `setMessages(messages: AgentMessage[]): void`
+- `WikiContextEngine` 实现 `setMessages()`，存储消息引用
+- `searchMemory` scope="all" 时搜索 wiki 条目 + wikiSummary + 对话消息文本
+- `harness-session.ts` 在消息变更后调用 `engine.setMessages(this.messages)`
+
+### 3. WorkflowRunner 支持 code executor
+
+- `Phase` 类型增加 `command?`, `script?`, `args?` 字段
+- `WorkflowRunner` 加载 YAML 时保留原始 executor 类型（不再强制 "self"）
+- 新增 `executePhase(phase)` 方法，code phase 调用 `executeCode()` 执行
+- LLM phase 仍通过 `session.prompt()` 执行
+
+### 文档
+
+- `docs/reference/architecture.md` 移除已知限制章节（已修复）
+
+## [2026-06-26] feat | Phase 6: Core PI Extension 迁移到 HarnessAgentSession
+
+**Phase 6 完成**，core 包现在可以通过自己的 `HarnessAgentSession` 运行 workflow，不再依赖 PI session。
+
+### 实现
+
+- `WorkflowRunner` 类 — 封装 `HarnessAgentSession` + core extension（workflow、state、guardrails、telemetry）
+- `workflow-cli.ts` — standalone REPL 入口，支持 `--workflow`、`--verify`、`--provider` 等参数
+- `bin/harness-kit` — CLI 二进制入口
+
+### 架构
+
+```
+harness-kit run
+  → WorkflowRunner
+    → HarnessAgentSession (agent runtime)
+    → harnessKitExtension(session.extensionAPI) (注入 workflow/state/guardrails)
+    → session.prompt() 驱动 workflow phases
+```
+
+Extension 函数本身未修改 — 它已经基于 `HarnessExtensionAPI` 接口编码，`HarnessAgentSession` 实现了这个接口。

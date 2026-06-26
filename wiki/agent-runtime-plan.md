@@ -11,13 +11,13 @@ harness-kit 当前是 PI Extension，寄生在 PI 的 agent loop 上。PI 是黑
 | Phase 1: 双 Agent Loop + Middleware | **已完成** | agent-a, agent-b, agent-loop, middleware pipeline, streaming-tool-executor, change-tracker, 4 个基础 middleware |
 | Phase 2: Session 层 + ExtensionAPI | **已完成** | harness-session, event-bridge |
 | Phase 3: Standalone CLI | **已完成** | args, config, repl, output |
-| Phase 3: Compaction（wiki 部分） | **未实现** | 仅 `COMPACTION_THRESHOLD` 常量 + 空 `compaction/` 目录 |
+| Phase 3b: Compaction（动态上下文组装） | **已完成** | ContextEngine, WikiContextEngine, WikiGenerator, CompactionMiddleware, search_memory 工具 |
 | Phase 4A: 最小 FactVerificationMiddleware | **已完成** | `fact-verification.ts`，strict/warn/off 三模式 + 重试 |
 | Phase 4B: Verification 模式 | **已完成** | CLI `--verify strict\|warn\|off`，默认 strict |
 | Phase 4C: Session middleware 注入 | **已完成** | `HarnessAgentSessionConfig.middlewares` + 自动注册 |
-| Phase 4D: 反馈质量与 ChangeTracker 增强 | **部分完成** | 文件路径已记录，缺变更摘要 |
-| Phase 5: Error Recovery + Planning | **未实现** | 零代码 |
-| Phase 6: 迁移 + 测试 | **未实现** | 依赖 Phase 3/5 完成 |
+| Phase 4D: 反馈质量与 ChangeTracker 增强 | **已完成** | 文件路径 + 变更摘要（write/edit/delete 语义描述） |
+| Phase 5: Error Recovery + Planning | **已完成** | ErrorType/RecoveryAction 枚举、classifyError、decideRecovery、ErrorRecoveryMiddleware |
+| Phase 6: 迁移 + 测试 | **已完成** | WorkflowRunner 封装 session + extension，workflow-cli.ts REPL 入口 |
 | Agent A 评估重设计 | **已完成** | `evaluator.ts` LLM 评估替代关键词匹配 |
 | Subagent 调度 | **未实现** | 仅设计文档 |
 
@@ -529,11 +529,11 @@ class HarnessAgentSession {
 
 **完成状态**: 全部完成。CLI 入口（args, config, repl, output），faux-integration 测试，agent-loop 修复，循环依赖解决。
 
-### Phase 3b: Compaction — 动态上下文组装（未实现）
+### Phase 3b: Compaction — 动态上下文组装（已完成）
 
 **核心理念**: LLM 智能够，缺的是与现实交互的工具。Compaction 不是"压缩摘要"，而是"动态组装最相关的上下文"。
 
-**完成状态**: 未实现。仅有 `COMPACTION_THRESHOLD = 0.75` 常量 + 空 `compaction/` 目录。
+**完成状态**: 已完成。ContextEngine 抽象类、WikiContextEngine 实现、WikiGenerator（LLM 生成+评分+重试）、CompactionMiddleware、search_memory 工具、Session 集成。23 个新测试。
 
 **上下文组装公式** (适用于任何轮次):
 ```
