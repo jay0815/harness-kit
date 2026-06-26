@@ -326,6 +326,73 @@ describe("file tracking", () => {
   });
 });
 
+describe("change summary", () => {
+  const tracker = new ChangeTracker();
+
+  it("records write summary with line count and preview", async () => {
+    const state = makeState();
+    const content = "line 1\nline 2\nline 3";
+    await tracker.afterTool(
+      state,
+      makeToolCall("write_file", { path: "a.ts", content }),
+      undefined,
+      makeResult(),
+    );
+    const files = getUnverifiedFiles(state);
+    expect(files[0].summary).toContain("write 3L");
+    expect(files[0].summary).toContain("line 1");
+  });
+
+  it("records edit summary with old/new snippets", async () => {
+    const state = makeState();
+    await tracker.afterTool(
+      state,
+      makeToolCall("edit_file", { path: "a.ts", old_string: "foo", new_string: "bar" }),
+      undefined,
+      makeResult(),
+    );
+    const files = getUnverifiedFiles(state);
+    expect(files[0].summary).toContain("foo");
+    expect(files[0].summary).toContain("bar");
+  });
+
+  it("records delete summary", async () => {
+    const state = makeState();
+    await tracker.afterTool(
+      state,
+      makeToolCall("delete_file", { path: "a.ts" }),
+      undefined,
+      makeResult(),
+    );
+    const files = getUnverifiedFiles(state);
+    expect(files[0].summary).toBe("deleted");
+  });
+
+  it("records empty write summary", async () => {
+    const state = makeState();
+    await tracker.afterTool(
+      state,
+      makeToolCall("write_file", { path: "a.ts" }),
+      undefined,
+      makeResult(),
+    );
+    const files = getUnverifiedFiles(state);
+    expect(files[0].summary).toContain("write (empty)");
+  });
+
+  it("falls back to tool name for unknown code tools", async () => {
+    const state = makeState();
+    await tracker.afterTool(
+      state,
+      makeToolCall("Write", { path: "a.ts", content: "" }),
+      undefined,
+      makeResult(),
+    );
+    const files = getUnverifiedFiles(state);
+    expect(files[0].summary).toContain("write (empty)");
+  });
+});
+
 describe("getUnverifiedFiles", () => {
   it("ignores dirty entries missing generation, path, or toolName", async () => {
     const state = makeState();

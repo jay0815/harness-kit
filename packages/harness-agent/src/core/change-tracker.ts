@@ -24,6 +24,7 @@ export interface ChangeEntry {
   generation: number;
   toolName: string;
   path: string;
+  summary: string;
 }
 
 interface TrackerState {
@@ -101,6 +102,7 @@ export class ChangeTracker implements AgentMiddleware {
           generation: tracker.codeGen,
           toolName: toolCall.name,
           path,
+          summary: this.extractSummary(toolCall),
         });
       }
     }
@@ -138,6 +140,36 @@ export class ChangeTracker implements AgentMiddleware {
       .map((c) => (c as { text: string }).text)
       .join("");
     return text.slice(0, 500);
+  }
+
+  private extractSummary(toolCall: AgentToolCall): string {
+    const args = extractToolArgs(toolCall);
+    const name = toolCall.name;
+
+    if (name === "delete_file" || name === "Delete") {
+      return "deleted";
+    }
+
+    if (name === "write_file" || name === "Write") {
+      const content = typeof args.content === "string" ? args.content : "";
+      if (!content) return "write (empty)";
+      const lines = content.split("\n").length;
+      const preview = content.slice(0, 120).replace(/\n/g, "\\n");
+      return `write ${lines}L: ${preview}${content.length > 120 ? "…" : ""}`;
+    }
+
+    if (name === "edit_file" || name === "Edit" || name === "MultiEdit") {
+      const oldText = typeof args.old_string === "string" ? args.old_string : typeof args.oldText === "string" ? args.oldText : "";
+      const newText = typeof args.new_string === "string" ? args.new_string : typeof args.newText === "string" ? args.newText : "";
+      if (oldText && newText) {
+        const oldPreview = oldText.slice(0, 60).replace(/\n/g, "\\n");
+        const newPreview = newText.slice(0, 60).replace(/\n/g, "\\n");
+        return `edit "${oldPreview}" → "${newPreview}"`;
+      }
+      return "edit";
+    }
+
+    return name;
   }
 }
 
