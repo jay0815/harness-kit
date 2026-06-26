@@ -195,3 +195,25 @@ phases:
 | Code executor | `src/code-executor.ts` | Shell command 和脚本执行 |
 | Workflow executor | `src/workflow-executor.ts` | Phase 编排、fail-stop、dry-run |
 | Telemetry | `src/telemetry.ts` | JSONL 事件记录 |
+
+## 已知限制
+
+### ErrorRecovery: backoffMs 无法实际执行延迟
+
+**问题**：`decideRecovery()` 为 `WAIT_AND_RETRY` 策略计算 `backoffMs`（指数退避），`ErrorRecoveryMiddleware` 将其作为提示写入 feedback 文本，但 agent loop 无法实际等待。
+
+**原因**：middleware 运行在同步的 `afterTool` hook 中，属于工具执行路径。agent loop 在工具执行后立即调用 LLM，没有延迟机制。
+
+**影响**：rate-limit（429）或资源耗尽时，agent 会立即重试，可能持续触发限流。
+
+**需要的改进**：在 agent loop 层面添加 backoff 机制——检测工具结果中的退避提示，在下一次 LLM 调用前执行 `await sleep(backoffMs)`。
+
+### ContextEngine: searchMemory scope 参数功能受限
+
+**问题**：`searchMemory(query, scope)` 的 `scope` 参数支持 `"wiki"` 和 `"all"`，但 `"all"` 只额外搜索 `wikiSummary`，不搜索完整对话历史。
+
+**原因**：`WikiContextEngine` 的数据范围仅包含 wiki 条目和 summary。完整对话历史存储在 `HarnessAgentSession.messages` 中，不在 ContextEngine 的访问范围内。
+
+**影响**：LLM 调用 `search_memory({ query: "...", scope: "all" })` 时，无法找到对话历史中的早期讨论内容。
+
+**需要的改进**：将对话历史引用传入 ContextEngine（例如通过构造函数或方法参数），使 `scope: "all"` 能够搜索 session.messages。
