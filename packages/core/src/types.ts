@@ -5,7 +5,7 @@ export type { Fact, ResultBlock, VerifyReport, VerifyCheck } from "@harness-kit/
 export interface Phase {
   /** Phase name */
   name: string;
-  /** Which coding agent runs this phase (e.g. "claude-code", "codex") */
+  /** Which coding agent runs this phase (e.g. "claude-code", "codex", "self", "code") */
   executor: string;
   /** Human-readable instructions */
   prompt: string;
@@ -13,6 +13,12 @@ export interface Phase {
   contextFiles: string[];
   /** Whether to pause for human confirmation after this phase */
   humanConfirm: boolean;
+  /** Shell command for code executor */
+  command?: string;
+  /** Script path for code executor */
+  script?: string;
+  /** Arguments for script executor */
+  args?: string[];
 }
 
 export interface Workflow {

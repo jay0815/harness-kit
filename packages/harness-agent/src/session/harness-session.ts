@@ -235,6 +235,11 @@ export class HarnessAgentSession {
 
         this.messages = result.messages;
 
+        // Sync messages reference to context engine for searchMemory
+        if (this.config.contextEngine) {
+          this.config.contextEngine.setMessages(this.messages);
+        }
+
         if (this.persistence) {
           for (let i = this.lastPersistedIndex; i < this.messages.length; i++) {
             this.persistence.appendMessage(this.messages[i]);

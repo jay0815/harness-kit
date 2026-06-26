@@ -4,7 +4,8 @@ import { HarnessAgentSession } from "@harness-kit/agent";
 import harnessKitExtension from "./index.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { loadWorkflow } from "./workflow-loader.js";
-import type { Workflow } from "./types.js";
+import { executeCode } from "./code-executor.js";
+import type { Workflow, Phase } from "./types.js";
 
 export interface WorkflowRunnerConfig {
   cwd: string;
@@ -33,10 +34,13 @@ export class WorkflowRunner {
         description: loaded.description ?? "",
         phases: loaded.phases.map((p) => ({
           name: p.name,
-          executor: "self" as const,
+          executor: p.executor,
           prompt: p.prompt ?? "",
           contextFiles: p.contextFiles ?? [],
           humanConfirm: p.humanConfirm ?? false,
+          command: p.command,
+          script: p.script,
+          args: p.args,
         })),
       };
     } else if (config.workflow) {
@@ -78,7 +82,40 @@ export class WorkflowRunner {
     await this.session.prompt(text);
   }
 
+  async executePhase(phase: Phase): Promise<{ success: boolean; output: string }> {
+    if (phase.executor === "code") {
+      return this.executeCodePhase(phase);
+    }
+    return this.executeLlmPhase(phase);
+  }
+
   async shutdown(): Promise<void> {
     await this.session.shutdown();
+  }
+
+  private async executeCodePhase(phase: Phase): Promise<{ success: boolean; output: string }> {
+    try {
+      const result = await executeCode({
+        phase: {
+          name: phase.name,
+          executor: "code",
+          command: phase.command,
+          script: phase.script,
+          args: phase.args,
+        },
+        workflowDir: this.cwd,
+      });
+      return { success: result.success, output: result.output };
+    } catch (err) {
+      return {
+        success: false,
+        output: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  private async executeLlmPhase(phase: Phase): Promise<{ success: boolean; output: string }> {
+    await this.session.prompt(phase.prompt);
+    return { success: true, output: "" };
   }
 }

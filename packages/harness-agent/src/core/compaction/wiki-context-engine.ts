@@ -13,6 +13,7 @@ export class WikiContextEngine extends ContextEngine {
   private wikiSummary = "";
   private generator?: WikiGeneratorConfig;
   private pendingJob: Promise<void> | null = null;
+  private messagesRef: AgentMessage[] = [];
 
   constructor(config: WikiContextEngineConfig = {}) {
     super(config);
@@ -62,6 +63,10 @@ export class WikiContextEngine extends ContextEngine {
     return this.wikiSummary;
   }
 
+  setMessages(messages: AgentMessage[]): void {
+    this.messagesRef = messages;
+  }
+
   async searchMemory(query: string, scope: "wiki" | "all" = "wiki"): Promise<string[]> {
     const results: string[] = [];
     const lowerQuery = query.toLowerCase();
@@ -83,8 +88,21 @@ export class WikiContextEngine extends ContextEngine {
       }
     }
 
-    if (scope === "all" && this.wikiSummary && this.wikiSummary.toLowerCase().includes(lowerQuery)) {
-      results.push(this.wikiSummary);
+    if (scope === "all") {
+      if (this.wikiSummary && this.wikiSummary.toLowerCase().includes(lowerQuery)) {
+        results.push(this.wikiSummary);
+      }
+
+      for (const msg of this.messagesRef) {
+        if (!("role" in msg) || !("content" in msg) || !Array.isArray(msg.content)) continue;
+        for (const block of msg.content) {
+          if (block.type === "text" && "text" in block && typeof block.text === "string") {
+            if (block.text.toLowerCase().includes(lowerQuery)) {
+              results.push(block.text);
+            }
+          }
+        }
+      }
     }
 
     return results;

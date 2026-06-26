@@ -23,6 +23,7 @@ export abstract class ContextEngine {
   abstract compact(messages: AgentMessage[], tokenUsage: TokenUsage): Promise<CompactionResult>;
   abstract getWikiSummary(): string;
   abstract searchMemory(query: string, scope?: "wiki" | "all"): Promise<string[]>;
+  abstract setMessages(messages: AgentMessage[]): void;
   abstract getWikiEntries(): WikiEntry[];
   abstract addWikiEntry(entry: WikiEntry): void;
   abstract scoreWiki(entry: WikiEntry): Promise<WikiScore | null>;

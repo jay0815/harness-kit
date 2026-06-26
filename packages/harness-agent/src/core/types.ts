@@ -122,6 +122,7 @@ export interface AgentToolResult<T> {
   details: T;
   terminate?: boolean;
   isError?: boolean;
+  backoffMs?: number;
 }
 
 export type AgentToolUpdateCallback<T = unknown> = (partialResult: AgentToolResult<T>) => void;
