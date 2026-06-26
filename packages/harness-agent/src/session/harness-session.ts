@@ -3,6 +3,7 @@ import { IterationBudget } from "../core/types.js";
 import { MiddlewarePipeline } from "../core/middleware.js";
 import { FactVerificationMiddleware } from "../core/fact-verification.js";
 import { CompactionMiddleware } from "../core/compaction/compaction-middleware.js";
+import { ErrorRecoveryMiddleware } from "../core/error-recovery/error-recovery-middleware.js";
 import { evaluateTaskWithSource } from "../core/evaluator.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
@@ -198,6 +199,11 @@ export class HarnessAgentSession {
         // 注册 CompactionMiddleware（如果配置了 contextEngine）
         if (this.config.contextEngine) {
           pipeline.register(new CompactionMiddleware(this.config.contextEngine));
+        }
+
+        // 注册 ErrorRecoveryMiddleware（如果配置了 errorRecovery）
+        if (this.config.errorRecovery) {
+          pipeline.register(new ErrorRecoveryMiddleware(this.config.errorRecovery));
         }
 
         // 注册内置默认 middleware（每次 prompt 新建，retryCount prompt-scoped）

@@ -200,4 +200,6 @@ export interface HarnessAgentSessionConfig {
   assessmentModel?: Model<Api>;
   /** Context engine for compaction. If provided, CompactionMiddleware is auto-registered. */
   contextEngine?: import("../core/compaction/context-engine.js").ContextEngine;
+  /** Error recovery configuration. If provided, ErrorRecoveryMiddleware is auto-registered. */
+  errorRecovery?: import("../core/error-recovery/types.js").ErrorRecoveryConfig;
 }
