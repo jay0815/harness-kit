@@ -2,6 +2,7 @@ import type { AgentEvent, AgentMessage, AgentTool } from "../core/types.js";
 import { IterationBudget } from "../core/types.js";
 import { MiddlewarePipeline } from "../core/middleware.js";
 import { FactVerificationMiddleware } from "../core/fact-verification.js";
+import { CompactionMiddleware } from "../core/compaction/compaction-middleware.js";
 import { evaluateTaskWithSource } from "../core/evaluator.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
@@ -124,10 +125,53 @@ export class HarnessAgentSession {
         }
 
         const baseTools: AgentTool[] = this.config.tools ?? [];
+
+        // 注册 search_memory 工具（如果配置了 contextEngine）
+        if (this.config.contextEngine) {
+          const engine = this.config.contextEngine;
+          baseTools.push({
+            name: "search_memory",
+            label: "Search Memory",
+            description:
+              "Search session history and project memory. Use when you need to find previously discussed topics, decisions, or file changes.",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "Search query" },
+                scope: { type: "string", enum: ["wiki", "all"], description: "Search scope" },
+              },
+              required: ["query"],
+            } as unknown as import("@sinclair/typebox").TSchema,
+            execute: async (_toolCallId, params) => {
+              const { query, scope } = params as { query: string; scope?: "wiki" | "all" };
+              const results = await engine.searchMemory(query, scope);
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text:
+                      results.length > 0 ? results.join("\n---\n") : "No matching memories found.",
+                  },
+                ],
+                details: { results, count: results.length },
+              };
+            },
+          });
+        }
+
         const ctxFactory = () => this.makeExtensionContext();
         const tools = mergeTools(baseTools, this.registeredTools, ctxFactory);
 
         let systemPrompt = this.config.systemPrompt;
+
+        // 注入 wiki summary 到 system prompt
+        if (this.config.contextEngine) {
+          const wikiSummary = this.config.contextEngine.getWikiSummary();
+          if (wikiSummary) {
+            systemPrompt = `${systemPrompt}\n\n## Project Memory\n${wikiSummary}`;
+          }
+        }
+
         const basHandlers = this.eventHandlers.get("before_agent_start");
         if (basHandlers) {
           const basCtx = this.makeExtensionContext();
@@ -149,6 +193,11 @@ export class HarnessAgentSession {
         // 注册用户提供的 middleware（实例注入，跨 prompt 复用，priority-sorted）
         for (const mw of this.config.middlewares ?? []) {
           pipeline.register(mw);
+        }
+
+        // 注册 CompactionMiddleware（如果配置了 contextEngine）
+        if (this.config.contextEngine) {
+          pipeline.register(new CompactionMiddleware(this.config.contextEngine));
         }
 
         // 注册内置默认 middleware（每次 prompt 新建，retryCount prompt-scoped）

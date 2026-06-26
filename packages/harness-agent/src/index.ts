@@ -17,4 +17,5 @@ export type {
 } from "./core/fact-verification.js";
 export { evaluateTask } from "./core/evaluator.js";
 export type { EvaluateTaskConfig } from "./core/evaluator.js";
+export * from "./core/compaction/index.js";
 export * from "./session/index.js";

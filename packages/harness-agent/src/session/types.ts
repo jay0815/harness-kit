@@ -157,18 +157,9 @@ export interface HarnessExtensionAPI {
   on(event: "agent_end", handler: ExtensionHandler<AgentEndPayload>): void;
   on(event: "turn_start", handler: ExtensionHandler<TurnStartPayload>): void;
   on(event: "turn_end", handler: ExtensionHandler<TurnEndPayload>): void;
-  on(
-    event: "tool_execution_start",
-    handler: ExtensionHandler<ToolExecutionStartPayload>,
-  ): void;
-  on(
-    event: "tool_execution_update",
-    handler: ExtensionHandler<ToolExecutionUpdatePayload>,
-  ): void;
-  on(
-    event: "tool_execution_end",
-    handler: ExtensionHandler<ToolExecutionEndPayload>,
-  ): void;
+  on(event: "tool_execution_start", handler: ExtensionHandler<ToolExecutionStartPayload>): void;
+  on(event: "tool_execution_update", handler: ExtensionHandler<ToolExecutionUpdatePayload>): void;
+  on(event: "tool_execution_end", handler: ExtensionHandler<ToolExecutionEndPayload>): void;
   on(event: "message_start", handler: ExtensionHandler<MessageStartPayload>): void;
   on(event: "message_update", handler: ExtensionHandler<MessageUpdatePayload>): void;
   on(event: "message_end", handler: ExtensionHandler<MessageEndPayload>): void;
@@ -207,4 +198,6 @@ export interface HarnessAgentSessionConfig {
   enableAssessment?: boolean;
   /** Model for assessment (defaults to main model) */
   assessmentModel?: Model<Api>;
+  /** Context engine for compaction. If provided, CompactionMiddleware is auto-registered. */
+  contextEngine?: import("../core/compaction/context-engine.js").ContextEngine;
 }

@@ -26,13 +26,19 @@ export type BridgedEvent =
   | { type: "message_update"; event: MessageUpdatePayload }
   | { type: "message_end"; event: MessageEndPayload };
 
-type ContentBlocks = (TextContent | ImageContent)[] | (TextContent | ThinkingContent | {
-  type: "tool_use"
-  id: string
-  name: string
-  // oxlint-disable-next-line typescript/no-explicit-any
-  input: Record<string, any>
-})[]
+type ContentBlocks =
+  | (TextContent | ImageContent)[]
+  | (
+      | TextContent
+      | ThinkingContent
+      | {
+          type: "tool_use";
+          id: string;
+          name: string;
+          // oxlint-disable-next-line typescript/no-explicit-any
+          input: Record<string, any>;
+        }
+    )[];
 
 /**
  * Convert internal toolCall content blocks to PI's tool_use format.
