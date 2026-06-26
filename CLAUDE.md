@@ -53,6 +53,18 @@ Standalone CLI（`harness-agent`）直接运行 middleware。PI Extension 模式
 - [conventions](wiki/conventions.md) — 代码风格、命名、模式
 - [log](wiki/log.md) — 活动日志
 
+## 文档
+
+用户文档。**查阅 wiki 后仍不确定时，看这里。**
+
+- [docs/README.md](docs/README.md) — 文档入口
+- [快速开始](docs/guides/quick-start.md) — 安装、构建、首次运行
+- [架构](docs/reference/architecture.md) — 系统分层、执行模式、数据流
+- [配置](docs/reference/configuration.md) — CLI 参数、环境变量
+- [文件地图](docs/reference/file-map.md) — 按职责分类的完整文件索引
+- [调试](docs/guides/debugging.md) — 调试技巧、常见问题排查
+- [故障排除](docs/guides/troubleshooting.md) — 常见问题及解决方案
+
 ## 规则
 
 - 仅限 ESM。禁止 `require()`。

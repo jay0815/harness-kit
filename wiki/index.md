@@ -2,7 +2,21 @@
 
 LLM-generated knowledge base for harness-kit. Updated on every significant change.
 
-## Pages
+## Docs
+
+用户文档位于 [docs/](../docs/)：
+
+| 文档 | 说明 |
+|------|------|
+| [docs/README.md](../docs/README.md) | 文档入口 |
+| [快速开始](../docs/guides/quick-start.md) | 安装、构建、首次运行 |
+| [架构](../docs/reference/architecture.md) | 系统分层、执行模式、数据流 |
+| [配置](../docs/reference/configuration.md) | CLI 参数、环境变量 |
+| [文件地图](../docs/reference/file-map.md) | 按职责分类的完整文件索引 |
+| [调试](../docs/guides/debugging.md) | 调试技巧 |
+| [故障排除](../docs/guides/troubleshooting.md) | 常见问题及解决方案 |
+
+## Wiki Pages
 
 | Page | Description |
 |------|-------------|
