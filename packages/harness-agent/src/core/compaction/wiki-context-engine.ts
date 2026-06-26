@@ -62,7 +62,7 @@ export class WikiContextEngine extends ContextEngine {
     return this.wikiSummary;
   }
 
-  async searchMemory(query: string, _scope: "wiki" | "all" = "wiki"): Promise<string[]> {
+  async searchMemory(query: string, scope: "wiki" | "all" = "wiki"): Promise<string[]> {
     const results: string[] = [];
     const lowerQuery = query.toLowerCase();
 
@@ -81,6 +81,10 @@ export class WikiContextEngine extends ContextEngine {
           results.push(field);
         }
       }
+    }
+
+    if (scope === "all" && this.wikiSummary && this.wikiSummary.toLowerCase().includes(lowerQuery)) {
+      results.push(this.wikiSummary);
     }
 
     return results;
@@ -111,10 +115,10 @@ export class WikiContextEngine extends ContextEngine {
     parts.push("Use search_memory tool to retrieve details from earlier conversation.");
 
     return {
-      role: "system",
+      role: "user",
       content: [{ type: "text", text: parts.join("\n") }],
       timestamp: Date.now(),
-    } as unknown as AgentMessage;
+    } as AgentMessage;
   }
 
   private async runWikiGeneration(

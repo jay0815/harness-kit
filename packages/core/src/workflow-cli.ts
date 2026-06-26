@@ -64,18 +64,24 @@ const apiKey = getEnvApiKey(provider);
 const streamFn = (m: never, ctx: never, opts: never) =>
   streamSimple(m as never, ctx as never, { ...(opts as object), apiKey } as never);
 
+const verifyMode = values.verify as string;
+if (verifyMode !== "strict" && verifyMode !== "warn" && verifyMode !== "off") {
+  console.error(`Invalid --verify mode "${verifyMode}". Must be: strict, warn, off`);
+  process.exit(1);
+}
+
 const cwd = resolve(String(values.workspace ?? process.cwd()));
 
-const runner = new WorkflowRunner({
-  cwd,
-  model: model as never,
-  streamFn: streamFn as never,
-  workflowPath: values.workflow as string | undefined,
-  verifyMode: (values.verify as "strict" | "warn" | "off") ?? "strict",
-  maxIterations: values["max-iterations"] ? Number(values["max-iterations"]) : undefined,
-});
-
 async function main() {
+  const runner = new WorkflowRunner({
+    cwd,
+    model: model as never,
+    streamFn: streamFn as never,
+    workflowPath: values.workflow as string | undefined,
+    verifyMode: verifyMode as "strict" | "warn" | "off",
+    maxIterations: values["max-iterations"] ? Number(values["max-iterations"]) : undefined,
+  });
+
   await runner.start();
 
   const workflow = runner.getWorkflow();

@@ -209,12 +209,17 @@ export async function generateWikiWithRetry(
   minScore: number = 0.7,
 ): Promise<{ entry: WikiEntry | null; score: WikiScore | null; retries: number }> {
   let retries = 0;
+  let lastEntry: WikiEntry | null = null;
+  let lastScore: WikiScore | null = null;
 
   while (retries <= maxRetries) {
     const entry = await generateWiki(config, messages, messageRange);
-    if (!entry) return { entry: null, score: null, retries };
+    if (!entry) return { entry: lastEntry, score: lastScore, retries };
 
     const score = await scoreWiki(config, entry);
+    lastEntry = entry;
+    lastScore = score;
+
     if (!score) return { entry, score: null, retries };
 
     if (score.overall >= minScore) {
@@ -224,5 +229,5 @@ export async function generateWikiWithRetry(
     retries++;
   }
 
-  return { entry: null, score: null, retries };
+  return { entry: lastEntry, score: lastScore, retries };
 }

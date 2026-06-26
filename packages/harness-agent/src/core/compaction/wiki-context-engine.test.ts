@@ -70,7 +70,7 @@ describe("WikiContextEngine", () => {
         role: string;
         content: Array<{ type: string; text: string }>;
       };
-      expect(first.role).toBe("system");
+      expect(first.role).toBe("user");
       expect(first.content[0].text).toContain("Compaction Summary");
     });
 

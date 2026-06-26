@@ -92,12 +92,16 @@ export class ErrorRecoveryMiddleware implements AgentMiddleware {
       return result;
     }
 
+    const backoffHint = decision.backoffMs
+      ? `\n[ErrorRecovery] Suggested backoff: ${decision.backoffMs}ms before retry.`
+      : "";
+
     return {
       content: [
         ...result.content,
         {
           type: "text" as const,
-          text: `\n[ErrorRecovery] ${decision.feedback}`,
+          text: `\n[ErrorRecovery] ${decision.feedback}${backoffHint}`,
         },
       ],
       details: result.details,

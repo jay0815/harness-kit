@@ -18,6 +18,7 @@ const CODE_MODIFYING_TOOLS = new Set([
   "Write",
   "Edit",
   "MultiEdit",
+  "Delete",
 ]);
 
 export interface ChangeEntry {

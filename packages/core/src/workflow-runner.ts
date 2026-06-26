@@ -4,7 +4,6 @@ import { HarnessAgentSession } from "@harness-kit/agent";
 import harnessKitExtension from "./index.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { loadWorkflow } from "./workflow-loader.js";
-import type { WorkflowConfig } from "./workflow-schema.js";
 import type { Workflow } from "./types.js";
 
 export interface WorkflowRunnerConfig {
