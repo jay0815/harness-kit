@@ -69,6 +69,7 @@ export function startAgentInPane(paneId: string, command: string): void {
  */
 export function typeToPane(paneId: string, text: string): void {
   // Strip ANSI escape sequences to prevent terminal injection
+  // oxlint-disable-next-line no-control-regex
   const sanitized = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
   bridge(["read", paneId, "5"]);
   bridge(["type", paneId, sanitized]);

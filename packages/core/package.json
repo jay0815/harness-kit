@@ -10,6 +10,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -28,7 +34,6 @@
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "^0.75.5",
     "@harness-kit/agent": "workspace:*",
-    "@harness-kit/kimi-coder": "workspace:*",
     "@sinclair/typebox": "catalog:",
     "yaml": "^2.7.0"
   },

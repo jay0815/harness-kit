@@ -24,7 +24,7 @@ export function initTelemetry(outputPath?: string): string {
     fd = null;
   }
 
-  sessionId = Date.now().toString(36);
+  sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   logPath = outputPath ?? join(process.cwd(), ".harness-kit", "telemetry", `${sessionId}.jsonl`);
   mkdirSync(dirname(logPath), { recursive: true });
   fd = openSync(logPath, "a");
