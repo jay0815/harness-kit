@@ -180,13 +180,17 @@ function toResultBlock(data: SubagentResultFile): ResultBlock {
 function buildClaudeCommand(
   prompt: string,
   task: SubagentTask,
-  _resultPath: string,
+  resultPath: string,
 ): { command: string; args: string[] } {
   const args = ["-p"];
   if (task.settingsPath) {
     args.push("--settings", task.settingsPath);
   }
+  // Prompt must come before --add-dir
   args.push(prompt);
+  // Grant write access to the result file directory
+  const resultDir = resultPath.substring(0, resultPath.lastIndexOf("/"));
+  args.push("--add-dir", resultDir);
   return { command: "claude", args };
 }
 
