@@ -1,6 +1,7 @@
 import type { Api } from "@earendil-works/pi-ai";
 import type { Model, StreamFn } from "@harness-kit/agent";
-import { HarnessAgentSession } from "@harness-kit/agent";
+import { HarnessAgentSession, SubagentRunner } from "@harness-kit/agent";
+import type { SubagentExecutor } from "@harness-kit/agent";
 import harnessKitExtension from "./index.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { loadWorkflow } from "./workflow-loader.js";
@@ -17,15 +18,21 @@ export interface WorkflowRunnerConfig {
   verifyMode?: "strict" | "warn" | "off";
   maxIterations?: number;
   contextWindow?: number;
+  enableSubagent?: boolean;
+  subagentSettingsPath?: string;
 }
 
 export class WorkflowRunner {
   private session: HarnessAgentSession;
   private workflow: Workflow;
   private cwd: string;
+  private subagentRunner: SubagentRunner;
+  private subagentSettingsPath?: string;
 
   constructor(config: WorkflowRunnerConfig) {
     this.cwd = config.cwd;
+    this.subagentRunner = new SubagentRunner({ resultDir: "/tmp" });
+    this.subagentSettingsPath = config.subagentSettingsPath;
 
     if (config.workflowPath) {
       const loaded = loadWorkflow(config.workflowPath);
@@ -61,6 +68,8 @@ export class WorkflowRunner {
       contextWindow: config.contextWindow,
       enablePersistence: true,
       sessionDir: `${this.cwd}/.harness-kit/sessions`,
+      enableSubagent: config.enableSubagent,
+      subagentSettingsPath: config.subagentSettingsPath,
     });
 
     harnessKitExtension(this.session.extensionAPI);
@@ -83,10 +92,14 @@ export class WorkflowRunner {
   }
 
   async executePhase(phase: Phase): Promise<{ success: boolean; output: string }> {
-    if (phase.executor === "code") {
-      return this.executeCodePhase(phase);
+    switch (phase.executor) {
+      case "code":
+        return this.executeCodePhase(phase);
+      case "subagent":
+        return this.executeSubagentPhase(phase);
+      default:
+        return this.executeLlmPhase(phase);
     }
-    return this.executeLlmPhase(phase);
   }
 
   async shutdown(): Promise<void> {
@@ -112,6 +125,72 @@ export class WorkflowRunner {
         output: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  private async executeSubagentPhase(phase: Phase): Promise<{ success: boolean; output: string }> {
+    const subagentId = this.subagentRunner.generateId();
+    const executor = (phase.subagentType ?? "claude") as SubagentExecutor;
+
+    const { command, args } = this.subagentRunner.buildCommand({
+      id: subagentId,
+      task: phase.prompt,
+      executor,
+      constraints: phase.subagentConstraints,
+      timeoutMs: phase.subagentTimeoutMs,
+      settingsPath: phase.subagentSettings ?? this.subagentSettingsPath,
+    });
+
+    const { spawn } = await import("node:child_process");
+
+    return new Promise((resolve) => {
+      const proc = spawn(command, args, {
+        cwd: this.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      const timeout = setTimeout(() => {
+        proc.kill("SIGTERM");
+        resolve({
+          success: false,
+          output: `Subagent timed out after ${phase.subagentTimeoutMs ?? 300_000}ms`,
+        });
+      }, phase.subagentTimeoutMs ?? 300_000);
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout?.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+      proc.stderr?.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        clearTimeout(timeout);
+
+        const result = this.subagentRunner.collectResult(subagentId);
+        if (result.success) {
+          resolve({
+            success: true,
+            output: result.block?.currentWork ?? stdout,
+          });
+        } else {
+          resolve({
+            success: false,
+            output: result.error ?? stderr ?? `Process exited with code ${code}`,
+          });
+        }
+      });
+
+      proc.on("error", (err) => {
+        clearTimeout(timeout);
+        resolve({
+          success: false,
+          output: `Failed to start subagent: ${err.message}`,
+        });
+      });
+    });
   }
 
   private async executeLlmPhase(phase: Phase): Promise<{ success: boolean; output: string }> {

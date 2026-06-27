@@ -13,7 +13,19 @@ vi.mock("@harness-kit/agent", () => {
     prompt = vi.fn().mockResolvedValue(undefined);
     shutdown = vi.fn().mockResolvedValue(undefined);
   }
-  return { HarnessAgentSession: MockSession };
+  class MockSubagentRunner {
+    generateId = vi.fn().mockReturnValue("test-id-1");
+    getResultPath = vi.fn().mockReturnValue("/tmp/hk-result-test-id-1.json");
+    buildCommand = vi.fn().mockReturnValue({ command: "echo", args: ["test"] });
+    collectResult = vi.fn().mockReturnValue({
+      success: false,
+      subagentId: "test-id-1",
+      error: "No result file found",
+      errorType: "no_result",
+      durationMs: 0,
+    });
+  }
+  return { HarnessAgentSession: MockSession, SubagentRunner: MockSubagentRunner };
 });
 
 vi.mock("./index.js", () => ({
@@ -120,5 +132,50 @@ describe("WorkflowRunner", () => {
       humanConfirm: false,
     });
     expect(result.success).toBe(true);
+  });
+
+  it("executePhase with subagent executor spawns process", async () => {
+    const runner = new WorkflowRunner(makeConfig());
+    // subagent executor spawns a real process, which will fail quickly
+    // because "echo" is not a valid subagent. We just verify it doesn't crash.
+    const result = await runner.executePhase({
+      name: "test-subagent",
+      executor: "subagent",
+      prompt: "test task",
+      contextFiles: [],
+      humanConfirm: false,
+      subagentType: "script",
+      subagentTimeoutMs: 5000,
+    });
+    // The process will fail (echo doesn't write a result file), but it should not throw
+    expect(result).toHaveProperty("success");
+    expect(result).toHaveProperty("output");
+  });
+
+  it("getWorkflow preserves subagent fields from provided workflow", () => {
+    const workflow: Workflow = {
+      name: "subagent-workflow",
+      description: "test",
+      phases: [
+        {
+          name: "design",
+          executor: "subagent",
+          prompt: "design the feature",
+          contextFiles: [],
+          humanConfirm: false,
+          subagentType: "claude",
+          subagentConstraints: ["Only modify src/"],
+          subagentTimeoutMs: 60000,
+          subagentSettings: "/path/to/settings.json",
+        },
+      ],
+    };
+    const runner = new WorkflowRunner(makeConfig(workflow));
+    const phases = runner.getWorkflow().phases;
+    expect(phases[0].executor).toBe("subagent");
+    expect(phases[0].subagentType).toBe("claude");
+    expect(phases[0].subagentConstraints).toEqual(["Only modify src/"]);
+    expect(phases[0].subagentTimeoutMs).toBe(60000);
+    expect(phases[0].subagentSettings).toBe("/path/to/settings.json");
   });
 });

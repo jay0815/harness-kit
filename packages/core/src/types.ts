@@ -5,7 +5,7 @@ export type { Fact, ResultBlock, VerifyReport, VerifyCheck } from "@harness-kit/
 export interface Phase {
   /** Phase name */
   name: string;
-  /** Which coding agent runs this phase (e.g. "claude-code", "codex", "self", "code") */
+  /** Which coding agent runs this phase (e.g. "self", "code", "subagent") */
   executor: string;
   /** Human-readable instructions */
   prompt: string;
@@ -19,6 +19,14 @@ export interface Phase {
   script?: string;
   /** Arguments for script executor */
   args?: string[];
+  /** Subagent executor type (claude, codex, harness-agent, script) */
+  subagentType?: string;
+  /** Subagent constraints */
+  subagentConstraints?: string[];
+  /** Subagent timeout in milliseconds */
+  subagentTimeoutMs?: number;
+  /** Settings file path for claude subagent */
+  subagentSettings?: string;
 }
 
 export interface Workflow {
