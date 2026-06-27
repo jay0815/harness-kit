@@ -31,7 +31,7 @@
 | `src/core/middleware.test.ts` | Middleware 测试 |
 | `src/core/middlewares.ts` | 内置中间件：VerificationGuidance, ToolCallGuardrail, QualityGate, IntentGate |
 | `src/core/middlewares.test.ts` | 内置中间件测试 |
-| `src/core/change-tracker.ts` | 追踪 codeGen/verifiedGen，single-writer 原则 |
+| `src/core/change-tracker.ts` | 追踪 codeGen/verifiedGen，single-writer 原则，记录变更摘要 |
 | `src/core/change-tracker.test.ts` | ChangeTracker 测试 |
 | `src/core/fact-verification.ts` | afterModel 钩子，自动校验 `<HK_RESULT>` 中的事实声明 |
 | `src/core/fact-verification.test.ts` | 事实校验测试 |
@@ -40,15 +40,51 @@
 | `src/core/verify.ts` | 读取文件、切片行号、逐字比对 |
 | `src/core/verify.test.ts` | 校验逻辑测试 |
 | `src/core/verify-types.ts` | 校验相关类型定义 |
-| `src/core/evaluator.ts` | 评估器 |
+| `src/core/evaluator.ts` | 评估器（LLM 驱动的任务评估） |
 | `src/core/evaluator.test.ts` | 评估器测试 |
-| `src/core/streaming-tool-executor.ts` | 流式工具执行 |
+| `src/core/streaming-tool-executor.ts` | 流式工具执行（并行/串行） |
 | `src/core/streaming-tool-executor.test.ts` | 流式工具执行测试 |
 | `src/core/tool-utils.ts` | 工具调用参数提取（`input ?? arguments` 防御逻辑） |
-| `src/core/types.ts` | 核心类型定义（Model, StreamFn 等） |
+| `src/core/types.ts` | 核心类型定义（Model, StreamFn, AgentMiddleware, TokenUsage 等） |
 | `src/core/types.test.ts` | 类型测试 |
 | `src/core/test-utils.ts` | 测试辅助工具 |
-| `src/core/compaction/` | 上下文压缩模块 |
+
+### Compaction 模块
+
+| 文件 | 职责 |
+|------|------|
+| `src/core/compaction/types.ts` | CompactionResult, WikiEntry, WikiScore 类型 |
+| `src/core/compaction/context-engine.ts` | ContextEngine 抽象类（shouldCompact, compact, searchMemory, setMessages） |
+| `src/core/compaction/wiki-context-engine.ts` | WikiContextEngine 实现（阈值触发、保留最近 N 轮、异步 wiki 生成） |
+| `src/core/compaction/wiki-context-engine.test.ts` | WikiContextEngine 测试 |
+| `src/core/compaction/wiki-generator.ts` | LLM 驱动的 wiki 生成 + 评分 + 重试 |
+| `src/core/compaction/wiki-generator.test.ts` | WikiGenerator 测试 |
+| `src/core/compaction/compaction-middleware.ts` | CompactionMiddleware（beforeModel hook，75% 阈值触发） |
+| `src/core/compaction/compaction-middleware.test.ts` | CompactionMiddleware 测试 |
+| `src/core/compaction/index.ts` | 模块导出 |
+
+### Error Recovery 模块
+
+| 文件 | 职责 |
+|------|------|
+| `src/core/error-recovery/types.ts` | ErrorType(7), RecoveryAction(7), ErrorRecord, RecoveryDecision |
+| `src/core/error-recovery/classifier.ts` | 错误分类器（模式匹配：ECONNRESET→TIMEOUT, 429→RESOURCE_EXHAUSTED 等） |
+| `src/core/error-recovery/classifier.test.ts` | 分类器测试 |
+| `src/core/error-recovery/strategy.ts` | 恢复策略引擎（指数退避、工具黑名单） |
+| `src/core/error-recovery/strategy.test.ts` | 策略引擎测试 |
+| `src/core/error-recovery/error-recovery-middleware.ts` | ErrorRecoveryMiddleware（afterTool hook，自动分类+恢复） |
+| `src/core/error-recovery/error-recovery-middleware.test.ts` | ErrorRecoveryMiddleware 测试 |
+| `src/core/error-recovery/index.ts` | 模块导出 |
+
+### Subagent 模块
+
+| 文件 | 职责 |
+|------|------|
+| `src/core/subagent/types.ts` | SubagentTask, SubagentResult, SubagentResultFile 类型 |
+| `src/core/subagent/subagent-runner.ts` | SubagentRunner（ID 生成、命令构建、结果收集、schema 验证） |
+| `src/core/subagent/subagent-runner.test.ts` | SubagentRunner 测试（20 个用例） |
+| `src/core/subagent/subagent-tools.ts` | spawn_subagent + collect_result 工具工厂 |
+| `src/core/subagent/index.ts` | 模块导出 |
 
 ### Session 层
 
@@ -74,10 +110,12 @@
 | `src/index.ts` | Extension entry — 注册工具、注入 workflow prompt、turn_end 自动验证 + telemetry |
 | `src/index.test.ts` | Extension 测试 |
 | `src/tools.ts` | 4 PI tools (start_agent, acp_send, acp_read, hard_verify) |
+| `src/tools.test.ts` | 工具测试（16 个用例） |
 | `src/pane.ts` | tmux/bridge subprocess 调用 |
+| `src/pane.test.ts` | Pane 测试（10 个用例） |
 | `src/guardrails.ts` | Workspace 快照和越权文件检测 |
 | `src/guardrails.test.ts` | Guardrails 测试 |
-| `src/state.ts` | 状态管理 |
+| `src/state.ts` | 状态管理（持久化、reconcileFromDisk） |
 | `src/state.test.ts` | 状态管理测试 |
 | `src/workflow-schema.ts` | TypeBox schemas for custom workflows |
 | `src/workflow-schema.test.ts` | Schema 测试 |
@@ -87,12 +125,16 @@
 | `src/workflow-executor.test.ts` | Executor 测试 |
 | `src/code-executor.ts` | Shell command 和脚本执行 |
 | `src/code-executor.test.ts` | Code executor 测试 |
-| `src/workflow.ts` | 工作流核心逻辑 |
+| `src/workflow.ts` | 默认工作流定义（feature-impl） |
 | `src/workflow.test.ts` | 工作流测试 |
+| `src/workflow-runner.ts` | 编程式入口，整合 session + extension + workflow（支持 self/code/subagent executor） |
+| `src/workflow-runner.test.ts` | WorkflowRunner 测试（10 个用例） |
+| `src/workflow-cli.ts` | Standalone workflow CLI 入口 |
+| `src/cli.ts` | harness-verify CLI（事实校验工具） |
 | `src/telemetry.ts` | JSONL 事件记录 |
 | `src/telemetry.test.ts` | 遥测测试 |
 | `src/telemetry-cli.ts` | 遥测 CLI 工具 |
-| `src/types.ts` | Core 类型定义 |
+| `src/types.ts` | Core 类型定义（Phase, Workflow, HarnessState 等） |
 
 ## @harness-kit/kimi-coder
 

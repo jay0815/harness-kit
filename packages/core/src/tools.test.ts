@@ -44,10 +44,11 @@ describe("startAgentTool", () => {
 
   it("creates pane and starts agent", async () => {
     const { createPane, labelPane, startAgentInPane } = await import("./pane.js");
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
     const result = await startAgentTool.execute("tc-1", {
       role: "executor",
       executor: "claude-code",
-    });
+    }, undefined, undefined, ctx);
 
     expect(createPane).toHaveBeenCalled();
     expect(labelPane).toHaveBeenCalledWith("%42", "executor");
@@ -59,12 +60,13 @@ describe("startAgentTool", () => {
     const { startAgentInPane } = await import("./pane.js");
     const mockFn = startAgentInPane as ReturnType<typeof vi.fn>;
     mockFn.mockClear();
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
 
     await startAgentTool.execute("tc-2", {
       role: "worker",
       executor: "codex",
       contextFiles: ["src/a.ts", "src/b.ts"],
-    });
+    }, undefined, undefined, ctx);
 
     expect(mockFn).toHaveBeenCalled();
     const call = mockFn.mock.calls[0];
@@ -82,26 +84,26 @@ describe("acpSendTool", () => {
   });
 
   it("returns error when agent not found", async () => {
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
     const result = await acpSendTool.execute("tc-3", {
       target: "nonexistent",
       task: "do something",
-    });
+    }, undefined, undefined, ctx);
 
     expect(result.details).toEqual({ error: "AGENT_NOT_FOUND" });
-    expect(result.content[0].text).toContain("No agent found");
+    expect((result.content[0] as { text: string }).text).toContain("No agent found");
   });
 
   it("sends task to existing agent", async () => {
     const { typeToPane, sendKeysToPane } = await import("./pane.js");
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
 
-    // First register an agent
-    await startAgentTool.execute("tc-4", { role: "worker", executor: "claude" });
+    await startAgentTool.execute("tc-4", { role: "worker", executor: "claude" }, undefined, undefined, ctx);
 
-    // Then send a task
     const result = await acpSendTool.execute("tc-5", {
       target: "worker",
       task: "Fix the bug",
-    });
+    }, undefined, undefined, ctx);
 
     expect(typeToPane).toHaveBeenCalled();
     expect(sendKeysToPane).toHaveBeenCalledWith("%42", "Enter");
@@ -116,9 +118,10 @@ describe("acpReadTool", () => {
   });
 
   it("returns error when agent not found", async () => {
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
     const result = await acpReadTool.execute("tc-6", {
       target: "nonexistent",
-    });
+    }, undefined, undefined, ctx);
 
     expect(result.details).toEqual({ error: "AGENT_NOT_FOUND" });
   });
@@ -127,10 +130,10 @@ describe("acpReadTool", () => {
     const { readPane } = await import("./pane.js");
     (readPane as ReturnType<typeof vi.fn>).mockReturnValue("Still working...");
 
-    // Register an agent first
-    await startAgentTool.execute("tc-7", { role: "reader", executor: "claude" });
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
+    await startAgentTool.execute("tc-7", { role: "reader", executor: "claude" }, undefined, undefined, ctx);
 
-    const result = await acpReadTool.execute("tc-8", { target: "reader" });
+    const result = await acpReadTool.execute("tc-8", { target: "reader" }, undefined, undefined, ctx);
     expect(result.details).toEqual({ status: "PENDING" });
   });
 
@@ -140,9 +143,10 @@ describe("acpReadTool", () => {
       'Done!\n<HK_RESULT>\n{"currentWork":"fixed bug","facts":[{"file":"a.ts","startLine":1,"endLine":3,"exactText":"hello"}]}\n</HK_RESULT>',
     );
 
-    await startAgentTool.execute("tc-9", { role: "completer", executor: "claude" });
+    const ctx = { cwd: process.cwd(), shutdown: () => {} };
+    await startAgentTool.execute("tc-9", { role: "completer", executor: "claude" }, undefined, undefined, ctx);
 
-    const result = await acpReadTool.execute("tc-10", { target: "completer" });
+    const result = await acpReadTool.execute("tc-10", { target: "completer" }, undefined, undefined, ctx);
     expect(result.details).toHaveProperty("status", "COMPLETE");
     expect(result.details).toHaveProperty("result");
   });
@@ -166,10 +170,10 @@ describe("hardVerifyTool", () => {
           exactText: '  "name": "harness-kit",',
         },
       ],
-    });
+    }, undefined, undefined, { cwd: process.cwd(), shutdown: () => {} });
 
     expect(result.details).toHaveProperty("overall");
-    expect(result.content[0].text).toContain("Hard Verification");
+    expect((result.content[0] as { text: string }).text).toContain("Hard Verification");
   });
 
   it("reports FAIL for incorrect facts", async () => {
@@ -184,7 +188,7 @@ describe("hardVerifyTool", () => {
           exactText: '  "name": "wrong-name",',
         },
       ],
-    });
+    }, undefined, undefined, { cwd: process.cwd(), shutdown: () => {} });
 
     expect(result.details).toHaveProperty("overall", "FAIL");
   });
