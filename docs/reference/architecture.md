@@ -145,7 +145,7 @@ harness-agent CLI
 │  └─────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  collect_result tool                         │    │
-│  │  ├─ 读取 /tmp/hk-result-{id}.json           │    │
+│  │  ├─ 读取 {os.tmpdir()}/hk-result-{id}.json  │    │
 │  │  ├─ 验证 schema                              │    │
 │  │  └─ 返回结构化 ResultBlock                    │    │
 │  └─────────────────────────────────────────────┘    │
@@ -163,7 +163,7 @@ harness-agent CLI
 
 ### 结果文件协议
 
-Subagent 完成任务后写入 `/tmp/hk-result-{id}.json`：
+Subagent 完成任务后写入 `{os.tmpdir()}/hk-result-{id}.json`：
 
 ```json
 {
@@ -280,7 +280,7 @@ phases:
     subagentType: claude
     subagentSettings: /path/to/settings.json
     prompt: "审查代码质量"
-    constraints:
+    subagentConstraints:
       - "只读取，不修改"
 ```
 

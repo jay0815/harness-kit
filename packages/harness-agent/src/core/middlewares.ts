@@ -65,10 +65,9 @@ export class VerificationGuidanceMiddleware implements AgentMiddleware {
  * - No-progress loops (idempotent tools returning same result)
  */
 export class ToolCallGuardrailMiddleware implements AgentMiddleware {
-  priority = PRIORITY_GUARD + 2;
+  priority = PRIORITY_GUARD;
   name = "ToolCallGuardrail";
 
-  private turnFailures: Map<string, number> = new Map();
   private toolFailures: Map<string, number> = new Map();
   private warnThreshold = 3;
   private blockThreshold = 5;
@@ -119,7 +118,6 @@ export class ToolCallGuardrailMiddleware implements AgentMiddleware {
   }
 
   reset(): void {
-    this.turnFailures.clear();
     this.toolFailures.clear();
   }
 }

@@ -55,9 +55,11 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
     names.add(phase.name);
 
     // Validate executor-specific fields
-    if (phase.executor === "llm") {
+    if (phase.executor === "llm" || phase.executor === "self") {
       if (!phase.prompt) {
-        throw new WorkflowLoadError(`Phase "${phase.name}": executor "llm" requires "prompt"`);
+        throw new WorkflowLoadError(
+          `Phase "${phase.name}": executor "${phase.executor}" requires "prompt"`,
+        );
       }
     } else if (phase.executor === "code") {
       if (!phase.command && !phase.script) {
@@ -76,6 +78,10 @@ function validatePhaseConfigs(config: WorkflowConfig, filePath: string): void {
         if (!existsSync(scriptPath)) {
           throw new WorkflowLoadError(`Phase "${phase.name}": script not found: ${scriptPath}`);
         }
+      }
+    } else if (phase.executor === "subagent") {
+      if (!phase.prompt) {
+        throw new WorkflowLoadError(`Phase "${phase.name}": executor "subagent" requires "prompt"`);
       }
     }
   }

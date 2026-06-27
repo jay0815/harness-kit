@@ -15,7 +15,7 @@ harness-kit 支持将任务委托给外部编码代理（subagent）执行。主
   │    └── 返回 subagent ID
   │
   ├─ subagent 执行任务...
-  │    └── 写入 /tmp/hk-result-{id}.json
+  │    └── 写入 {os.tmpdir()}/hk-result-{id}.json
   │
   ├─ collect_result 工具
   │    ├── 读取 JSON 文件
@@ -38,7 +38,7 @@ harness-kit 支持将任务委托给外部编码代理（subagent）执行。主
 
 Subagent 完成任务后，将结果以 JSON 格式写入约定路径：
 
-**路径**: `/tmp/hk-result-{subagentId}.json`
+**路径**: `{os.tmpdir()}/hk-result-{subagentId}.json`
 
 **格式**:
 ```json
@@ -99,7 +99,7 @@ phases:
     subagentSettings: /path/to/settings.json
     subagentTimeoutMs: 120000
     prompt: "设计认证模块的实现方案"
-    constraints:
+    subagentConstraints:
       - "只修改 src/auth/ 目录"
       - "不要修改现有测试"
 

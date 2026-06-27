@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync, type Dirent } from "node:fs";
-import { join, relative } from "node:path";
+import { join, normalize, relative } from "node:path";
 import { createHash } from "node:crypto";
 import type { SnapshotEntry } from "./types.js";
 
@@ -25,11 +25,13 @@ function walkDir(root: string, dir: string, snapshot: WorkspaceSnapshot): void {
   for (const entry of entries) {
     if (SKIP_DIRS.has(entry.name)) continue;
 
+    if (entry.isSymbolicLink()) continue;
+
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       walkDir(root, fullPath, snapshot);
     } else if (entry.isFile()) {
-      const relPath = relative(root, fullPath);
+      const relPath = normalizeSnapshotPath(relative(root, fullPath));
       try {
         const st = statSync(fullPath);
         // Skip files larger than MAX_FILE_SIZE to avoid blocking the event loop
@@ -54,8 +56,7 @@ export function detectOutOfScope(
   after: WorkspaceSnapshot,
   declaredFiles: string[],
 ): string[] {
-  // Normalize declared files to match snapshot key format (remove leading ./)
-  const declared = new Set(declaredFiles.map((f) => f.replace(/^\.\//, "")));
+  const declared = new Set(declaredFiles.map(normalizeSnapshotPath));
   const allKeys = new Set([...before.keys(), ...after.keys()]);
   const outOfScope: string[] = [];
 
@@ -75,4 +76,8 @@ export function detectOutOfScope(
   }
 
   return outOfScope.sort();
+}
+
+function normalizeSnapshotPath(filePath: string): string {
+  return normalize(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
 }

@@ -153,6 +153,83 @@ phases:
     expect(run.phases[0].output).toBe("LLM executed: llm-phase");
   });
 
+  it("uses LLM executor for self phases", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: self-phase
+    executor: self
+    prompt: Do something
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    const llmExecutor: LlmExecutor = {
+      execute: async (phase, _ctx) => ({
+        success: true,
+        output: `Self executed: ${phase.name}`,
+      }),
+    };
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor,
+    });
+
+    expect(run.overallSuccess).toBe(true);
+    expect(run.phases[0].executor).toBe("self");
+    expect(run.phases[0].output).toBe("Self executed: self-phase");
+  });
+
+  it("dry-runs subagent phases explicitly", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: review
+    executor: subagent
+    prompt: Review changes
+    subagentType: codex
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      dryRun: true,
+    });
+
+    expect(run.overallSuccess).toBe(true);
+    expect(run.phases[0].executor).toBe("subagent");
+    expect(run.phases[0].output).toContain("subagent codex");
+  });
+
+  it("reports unsupported subagent phases in executeWorkflow", async () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: review
+    executor: subagent
+    prompt: Review changes
+    subagentType: codex
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    const config = loadWorkflow(filePath);
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+    });
+
+    expect(run.overallSuccess).toBe(false);
+    expect(run.phases[0].success).toBe(false);
+    expect(run.phases[0].output).toContain("only supported by WorkflowRunner");
+  });
+
   it("reports error when LLM executor missing", async () => {
     const yaml = `
 workflow: test

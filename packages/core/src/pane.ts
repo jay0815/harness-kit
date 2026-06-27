@@ -65,14 +65,25 @@ export function startAgentInPane(paneId: string, command: string): void {
 
 /**
  * Send a text message to a pane (no Enter).
- * Strips ANSI escape sequences to prevent terminal injection.
+ * Strips terminal control characters to prevent terminal injection.
  */
 export function typeToPane(paneId: string, text: string): void {
-  // Strip ANSI escape sequences to prevent terminal injection
-  // oxlint-disable-next-line no-control-regex
-  const sanitized = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+  const sanitized = sanitizePaneText(text);
   bridge(["read", paneId, "5"]);
   bridge(["type", paneId, sanitized]);
+}
+
+function sanitizePaneText(text: string): string {
+  let sanitized = "";
+  for (const char of text) {
+    const code = char.charCodeAt(0);
+    const allowedControl = code === 0x09 || code === 0x0a || code === 0x0d;
+    const printable = code >= 0x20 && code !== 0x7f && (code < 0x80 || code > 0x9f);
+    if (allowedControl || printable) {
+      sanitized += char;
+    }
+  }
+  return sanitized;
 }
 
 /**

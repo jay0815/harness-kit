@@ -1,6 +1,6 @@
 import type { Api } from "@earendil-works/pi-ai";
 import type { Model, StreamFn } from "@harness-kit/agent";
-import { HarnessAgentSession, SubagentRunner } from "@harness-kit/agent";
+import { DEFAULT_TIMEOUT_MS, HarnessAgentSession, SubagentRunner } from "@harness-kit/agent";
 import type { SubagentExecutor } from "@harness-kit/agent";
 import harnessKitExtension from "./index.js";
 import { createDefaultWorkflow } from "./workflow.js";
@@ -31,7 +31,7 @@ export class WorkflowRunner {
 
   constructor(config: WorkflowRunnerConfig) {
     this.cwd = config.cwd;
-    this.subagentRunner = new SubagentRunner({ resultDir: "/tmp" });
+    this.subagentRunner = new SubagentRunner();
     this.subagentSettingsPath = config.subagentSettingsPath;
 
     if (config.workflowPath) {
@@ -48,6 +48,10 @@ export class WorkflowRunner {
           command: p.command,
           script: p.script,
           args: p.args,
+          subagentType: p.subagentType,
+          subagentConstraints: p.subagentConstraints,
+          subagentTimeoutMs: p.subagentTimeoutMs,
+          subagentSettings: p.subagentSettings,
         })),
       };
     } else if (config.workflow) {
@@ -56,7 +60,8 @@ export class WorkflowRunner {
       this.workflow = createDefaultWorkflow();
     }
 
-    const systemPrompt = config.systemPrompt ?? "You are a coding agent guided by a structured workflow.";
+    const systemPrompt =
+      config.systemPrompt ?? "You are a coding agent guided by a structured workflow.";
 
     this.session = new HarnessAgentSession({
       cwd: this.cwd,
@@ -93,12 +98,18 @@ export class WorkflowRunner {
 
   async executePhase(phase: Phase): Promise<{ success: boolean; output: string }> {
     switch (phase.executor) {
+      case "self":
+      case "llm":
+        return this.executeLlmPhase(phase);
       case "code":
         return this.executeCodePhase(phase);
       case "subagent":
         return this.executeSubagentPhase(phase);
       default:
-        return this.executeLlmPhase(phase);
+        return {
+          success: false,
+          output: `Unknown phase executor: ${phase.executor}`,
+        };
     }
   }
 
@@ -128,8 +139,16 @@ export class WorkflowRunner {
   }
 
   private async executeSubagentPhase(phase: Phase): Promise<{ success: boolean; output: string }> {
+    const executor = phase.subagentType ?? "claude";
+
+    if (!isSubagentExecutor(executor)) {
+      return {
+        success: false,
+        output: `Unknown subagent executor: ${executor}`,
+      };
+    }
+
     const subagentId = this.subagentRunner.generateId();
-    const executor = (phase.subagentType ?? "claude") as SubagentExecutor;
 
     const { command, args } = this.subagentRunner.buildCommand({
       id: subagentId,
@@ -152,9 +171,9 @@ export class WorkflowRunner {
         proc.kill("SIGTERM");
         resolve({
           success: false,
-          output: `Subagent timed out after ${phase.subagentTimeoutMs ?? 300_000}ms`,
+          output: `Subagent timed out after ${phase.subagentTimeoutMs ?? DEFAULT_TIMEOUT_MS}ms`,
         });
-      }, phase.subagentTimeoutMs ?? 300_000);
+      }, phase.subagentTimeoutMs ?? DEFAULT_TIMEOUT_MS);
 
       let stdout = "";
       let stderr = "";
@@ -197,4 +216,8 @@ export class WorkflowRunner {
     await this.session.prompt(phase.prompt);
     return { success: true, output: "" };
   }
+}
+
+function isSubagentExecutor(value: string): value is SubagentExecutor {
+  return value === "claude" || value === "codex" || value === "harness-agent" || value === "script";
 }

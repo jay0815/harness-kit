@@ -74,11 +74,21 @@ async function executePhase(
     return executeCode(options);
   }
 
+  if (phase.executor === "subagent") {
+    return {
+      phaseName: phase.name,
+      executor: "subagent",
+      success: false,
+      output: 'Error: executor "subagent" is only supported by WorkflowRunner',
+      durationMs: 0,
+    };
+  }
+
   // LLM executor
   if (!context.llmExecutor) {
     return {
       phaseName: phase.name,
-      executor: "llm",
+      executor: phase.executor,
       success: false,
       output: "Error: no LLM executor provided",
       durationMs: 0,
@@ -106,7 +116,7 @@ async function executePhase(
 
     return {
       phaseName: phase.name,
-      executor: "llm",
+      executor: phase.executor,
       success: result.success,
       output: result.output,
       durationMs: Date.now() - startTime,
@@ -115,7 +125,7 @@ async function executePhase(
     const isAbort = err instanceof Error && err.name === "AbortError";
     return {
       phaseName: phase.name,
-      executor: "llm",
+      executor: phase.executor,
       success: false,
       output: isAbort
         ? `Error: LLM phase "${phase.name}" timed out after ${timeoutMs}ms`
@@ -129,14 +139,25 @@ async function executePhase(
 
 function executePhaseDryRun(phase: PhaseConfig, outputs: Map<string, string>): PhaseResult {
   // In dry-run mode, we simulate execution
-  if (phase.executor === "llm") {
+  if (phase.executor === "llm" || phase.executor === "self") {
     const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
 
     return {
       phaseName: phase.name,
-      executor: "llm",
+      executor: phase.executor,
       success: true,
       output: `[DRY RUN] Would execute LLM with prompt:\n${prompt}`,
+      durationMs: 0,
+    };
+  }
+
+  if (phase.executor === "subagent") {
+    const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
+    return {
+      phaseName: phase.name,
+      executor: "subagent",
+      success: true,
+      output: `[DRY RUN] Would execute subagent ${phase.subagentType ?? "claude"} with prompt:\n${prompt}`,
       durationMs: 0,
     };
   }

@@ -8,8 +8,10 @@ describe("WorkflowConfig schema", () => {
       workflow: "test-workflow",
       description: "A test workflow",
       phases: [
+        { name: "design", executor: "self", prompt: "Design this" },
         { name: "analyze", executor: "llm", prompt: "Analyze this" },
         { name: "build", executor: "code", command: "pnpm run build" },
+        { name: "review", executor: "subagent", prompt: "Review this", subagentType: "claude" },
       ],
     };
     expect(Value.Check(WorkflowConfig, config)).toBe(true);
@@ -46,6 +48,15 @@ describe("WorkflowConfig schema", () => {
 });
 
 describe("PhaseConfig schema", () => {
+  it("accepts self executor with prompt", () => {
+    const phase = {
+      name: "test",
+      executor: "self",
+      prompt: "Do something",
+    };
+    expect(Value.Check(PhaseConfig, phase)).toBe(true);
+  });
+
   it("accepts llm executor with prompt", () => {
     const phase = {
       name: "test",
@@ -73,6 +84,29 @@ describe("PhaseConfig schema", () => {
     expect(Value.Check(PhaseConfig, phase)).toBe(true);
   });
 
+  it("accepts subagent executor with subagent settings", () => {
+    const phase = {
+      name: "review",
+      executor: "subagent",
+      prompt: "Review the changes",
+      subagentType: "codex",
+      subagentConstraints: ["Only inspect src/"],
+      subagentTimeoutMs: 120000,
+      subagentSettings: "/tmp/settings.json",
+    };
+    expect(Value.Check(PhaseConfig, phase)).toBe(true);
+  });
+
+  it("rejects invalid subagent executor type", () => {
+    const phase = {
+      name: "review",
+      executor: "subagent",
+      prompt: "Review the changes",
+      subagentType: "unknown",
+    };
+    expect(Value.Check(PhaseConfig, phase)).toBe(false);
+  });
+
   it("rejects invalid executor type", () => {
     const phase = {
       name: "test",
@@ -92,12 +126,20 @@ describe("PhaseConfig schema", () => {
 });
 
 describe("ExecutorType", () => {
+  it("accepts self", () => {
+    expect(Value.Check(ExecutorType, "self")).toBe(true);
+  });
+
   it("accepts llm", () => {
     expect(Value.Check(ExecutorType, "llm")).toBe(true);
   });
 
   it("accepts code", () => {
     expect(Value.Check(ExecutorType, "code")).toBe(true);
+  });
+
+  it("accepts subagent", () => {
+    expect(Value.Check(ExecutorType, "subagent")).toBe(true);
   });
 
   it("rejects other values", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { snapshotWorkspace, detectOutOfScope } from "./guardrails.js";
@@ -55,6 +55,19 @@ describe("snapshotWorkspace", () => {
     const snap = snapshotWorkspace(ws);
     expect(snap.has("node_modules/pkg/index.js")).toBe(false);
   });
+
+  it("does not follow symlinks", () => {
+    const outside = mkdtempSync(join(tmpdir(), "hk-guard-outside-"));
+    try {
+      writeFileSync(join(outside, "secret.txt"), "outside");
+      symlinkSync(join(outside, "secret.txt"), join(ws, "linked.txt"));
+
+      const snap = snapshotWorkspace(ws);
+      expect(snap.has("linked.txt")).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("detectOutOfScope", () => {
@@ -95,6 +108,18 @@ describe("detectOutOfScope", () => {
     const after = snapshotWorkspace(ws);
 
     const result = detectOutOfScope(before, after, ["src/a.ts", "src/b.ts"]);
+    expect(result).toHaveLength(0);
+  });
+
+  it("normalizes declared relative paths", () => {
+    mkdirSync(join(ws, "src"), { recursive: true });
+    writeFileSync(join(ws, "src/a.ts"), "before");
+    const before = snapshotWorkspace(ws);
+
+    writeFileSync(join(ws, "src/a.ts"), "after");
+    const after = snapshotWorkspace(ws);
+
+    const result = detectOutOfScope(before, after, ["./src/../src/a.ts"]);
     expect(result).toHaveLength(0);
   });
 

@@ -1,8 +1,21 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 // Executor types
-export const ExecutorType = Type.Union([Type.Literal("llm"), Type.Literal("code")]);
+export const ExecutorType = Type.Union([
+  Type.Literal("self"),
+  Type.Literal("llm"),
+  Type.Literal("code"),
+  Type.Literal("subagent"),
+]);
 export type ExecutorType = Static<typeof ExecutorType>;
+
+export const SubagentExecutorType = Type.Union([
+  Type.Literal("claude"),
+  Type.Literal("codex"),
+  Type.Literal("harness-agent"),
+  Type.Literal("script"),
+]);
+export type SubagentExecutorType = Static<typeof SubagentExecutorType>;
 
 // Code execution: shell command or script reference
 export const CodeExecution = Type.Union([
@@ -26,6 +39,11 @@ export const PhaseConfig = Type.Object({
   command: Type.Optional(Type.String()),
   script: Type.Optional(Type.String()),
   args: Type.Optional(Type.Array(Type.String())),
+  // Subagent executor fields
+  subagentType: Type.Optional(SubagentExecutorType),
+  subagentConstraints: Type.Optional(Type.Array(Type.String())),
+  subagentTimeoutMs: Type.Optional(Type.Number()),
+  subagentSettings: Type.Optional(Type.String()),
 });
 export type PhaseConfig = Static<typeof PhaseConfig>;
 

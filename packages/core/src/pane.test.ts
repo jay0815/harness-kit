@@ -11,7 +11,8 @@ vi.mock("node:child_process", () => ({
     }
     if (cmd === "tmux-bridge" || cmd.endsWith("tmux-bridge")) {
       if (args[0] === "read") return "output from pane\n";
-      if (args[0] === "list") return "TARGET SESSION SIZE PROCESS LABEL CWD\n%42 0:0 80x24 zsh - /tmp\n";
+      if (args[0] === "list")
+        return "TARGET SESSION SIZE PROCESS LABEL CWD\n%42 0:0 80x24 zsh - /tmp\n";
       return "";
     }
     return "";
@@ -51,6 +52,19 @@ describe("pane functions", () => {
   it("typeToPane calls bridge", async () => {
     const { typeToPane } = await import("./pane.js");
     expect(() => typeToPane("%42", "hello")).not.toThrow();
+  });
+
+  it("typeToPane strips terminal control characters", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { typeToPane } = await import("./pane.js");
+
+    typeToPane("%42", "hello\x1b[31m\nworld\x07");
+
+    expect(execFileSync).toHaveBeenCalledWith(
+      "tmux-bridge",
+      ["type", "%42", "hello[31m\nworld"],
+      expect.any(Object),
+    );
   });
 
   it("sendKeysToPane calls bridge", async () => {

@@ -20,23 +20,36 @@ describe("loadWorkflow", () => {
 workflow: test-workflow
 description: A test workflow
 phases:
+  - name: design
+    executor: self
+    prompt: Design this
   - name: analyze
     executor: llm
     prompt: Analyze this
   - name: build
     executor: code
     command: pnpm run build
+  - name: review
+    executor: subagent
+    prompt: Review this
+    subagentType: claude
+    subagentConstraints:
+      - Only inspect src/
 `;
     const filePath = join(ws, "workflow.yaml");
     writeFileSync(filePath, yaml);
 
     const config = loadWorkflow(filePath);
     expect(config.workflow).toBe("test-workflow");
-    expect(config.phases).toHaveLength(2);
-    expect(config.phases[0].name).toBe("analyze");
-    expect(config.phases[0].executor).toBe("llm");
-    expect(config.phases[1].name).toBe("build");
-    expect(config.phases[1].executor).toBe("code");
+    expect(config.phases).toHaveLength(4);
+    expect(config.phases[0].name).toBe("design");
+    expect(config.phases[0].executor).toBe("self");
+    expect(config.phases[1].name).toBe("analyze");
+    expect(config.phases[1].executor).toBe("llm");
+    expect(config.phases[2].name).toBe("build");
+    expect(config.phases[2].executor).toBe("code");
+    expect(config.phases[3].executor).toBe("subagent");
+    expect(config.phases[3].subagentType).toBe("claude");
   });
 
   it("throws on missing file", () => {
@@ -104,6 +117,19 @@ phases:
     expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
   });
 
+  it("throws on self phase without prompt", () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: test
+    executor: self
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
+  });
+
   it("throws on code phase without command or script", () => {
     const yaml = `
 workflow: test
@@ -125,6 +151,35 @@ phases:
     executor: code
     command: echo ok
     script: ./test.ts
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
+  });
+
+  it("throws on subagent phase without prompt", () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: test
+    executor: subagent
+    subagentType: claude
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
+  });
+
+  it("throws on invalid subagent type", () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: test
+    executor: subagent
+    prompt: Review
+    subagentType: unknown
 `;
     const filePath = join(ws, "workflow.yaml");
     writeFileSync(filePath, yaml);

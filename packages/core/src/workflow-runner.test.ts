@@ -25,7 +25,11 @@ vi.mock("@harness-kit/agent", () => {
       durationMs: 0,
     });
   }
-  return { HarnessAgentSession: MockSession, SubagentRunner: MockSubagentRunner };
+  return {
+    DEFAULT_TIMEOUT_MS: 300_000,
+    HarnessAgentSession: MockSession,
+    SubagentRunner: MockSubagentRunner,
+  };
 });
 
 vi.mock("./index.js", () => ({
@@ -63,7 +67,9 @@ describe("WorkflowRunner", () => {
     const workflow: Workflow = {
       name: "custom",
       description: "test",
-      phases: [{ name: "p1", executor: "self", prompt: "do it", contextFiles: [], humanConfirm: false }],
+      phases: [
+        { name: "p1", executor: "self", prompt: "do it", contextFiles: [], humanConfirm: false },
+      ],
     };
     const runner = new WorkflowRunner(makeConfig(workflow));
     expect(runner.getWorkflowName()).toBe("custom");
@@ -74,8 +80,21 @@ describe("WorkflowRunner", () => {
       name: "mixed",
       description: "test",
       phases: [
-        { name: "llm-phase", executor: "self", prompt: "design", contextFiles: [], humanConfirm: false },
-        { name: "code-phase", executor: "code", prompt: "", contextFiles: [], humanConfirm: false, command: "pnpm test" },
+        {
+          name: "llm-phase",
+          executor: "self",
+          prompt: "design",
+          contextFiles: [],
+          humanConfirm: false,
+        },
+        {
+          name: "code-phase",
+          executor: "code",
+          prompt: "",
+          contextFiles: [],
+          humanConfirm: false,
+          command: "pnpm test",
+        },
       ],
     };
     const runner = new WorkflowRunner(makeConfig(workflow));
@@ -134,6 +153,31 @@ describe("WorkflowRunner", () => {
     expect(result.success).toBe(true);
   });
 
+  it("executePhase with llm executor calls session.prompt", async () => {
+    const runner = new WorkflowRunner(makeConfig());
+    const result = await runner.executePhase({
+      name: "design",
+      executor: "llm",
+      prompt: "design the feature",
+      contextFiles: [],
+      humanConfirm: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("executePhase rejects unknown executor", async () => {
+    const runner = new WorkflowRunner(makeConfig());
+    const result = await runner.executePhase({
+      name: "unknown",
+      executor: "mystery",
+      prompt: "do something",
+      contextFiles: [],
+      humanConfirm: false,
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Unknown phase executor");
+  });
+
   it("executePhase with subagent executor spawns process", async () => {
     const runner = new WorkflowRunner(makeConfig());
     // subagent executor spawns a real process, which will fail quickly
@@ -150,6 +194,20 @@ describe("WorkflowRunner", () => {
     // The process will fail (echo doesn't write a result file), but it should not throw
     expect(result).toHaveProperty("success");
     expect(result).toHaveProperty("output");
+  });
+
+  it("executePhase rejects unknown subagent executor", async () => {
+    const runner = new WorkflowRunner(makeConfig());
+    const result = await runner.executePhase({
+      name: "test-subagent",
+      executor: "subagent",
+      prompt: "test task",
+      contextFiles: [],
+      humanConfirm: false,
+      subagentType: "unknown",
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Unknown subagent executor");
   });
 
   it("getWorkflow preserves subagent fields from provided workflow", () => {

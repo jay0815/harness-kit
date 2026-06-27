@@ -90,8 +90,8 @@ export class SubagentRunner {
   }
 
   buildCommand(task: SubagentTask): { command: string; args: string[] } {
-    const prompt = buildSubagentPrompt(task);
     const resultPath = this.getResultPath(task.id);
+    const prompt = buildSubagentPrompt(task, resultPath);
 
     switch (task.executor) {
       case "claude":
@@ -106,8 +106,8 @@ export class SubagentRunner {
   }
 }
 
-export function buildSubagentPrompt(task: SubagentTask): string {
-  const resultPath = `/tmp/hk-result-${task.id}.json`;
+export function buildSubagentPrompt(task: SubagentTask, resultPath?: string): string {
+  const outputPath = resultPath ?? join(RESULT_DIR, `hk-result-${task.id}.json`);
   const constraints = (task.constraints ?? []).map((c) => `- ${c}`).join("\n");
 
   return `You are a focused coding agent. Complete the assigned task.
@@ -117,7 +117,7 @@ ${task.task}
 
 ${constraints ? `## Constraints\n${constraints}\n` : ""}## Output Requirements
 
-After completing the task, write the result as JSON to: ${resultPath}
+After completing the task, write the result as JSON to: ${outputPath}
 
 JSON format:
 {

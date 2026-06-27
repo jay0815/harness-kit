@@ -37,7 +37,20 @@ describe("buildSubagentPrompt", () => {
       task: "Fix bug",
       executor: "claude",
     });
-    expect(prompt).toContain("/tmp/hk-result-test-1.json");
+    expect(prompt).toContain(join(tmpdir(), "hk-result-test-1.json"));
+  });
+
+  it("uses explicit result path when provided", () => {
+    const resultPath = join(tmpdir(), "custom-results", "hk-result-test-1.json");
+    const prompt = buildSubagentPrompt(
+      {
+        id: "test-1",
+        task: "Fix bug",
+        executor: "claude",
+      },
+      resultPath,
+    );
+    expect(prompt).toContain(resultPath);
   });
 
   it("includes JSON format example", () => {
@@ -99,9 +112,7 @@ describe("validateResultFile", () => {
     const result: SubagentResultFile = {
       summary: "Done",
       currentWork: "Modified file",
-      facts: [
-        { file: "src/a.ts", startLine: 1, endLine: 5, exactText: "const a = 1" },
-      ],
+      facts: [{ file: "src/a.ts", startLine: 1, endLine: 5, exactText: "const a = 1" }],
     };
     expect(validateResultFile(result)).toBe(true);
   });
@@ -117,7 +128,11 @@ describe("validateResultFile", () => {
   });
 
   it("rejects non-array facts", () => {
-    const result = { summary: "x", currentWork: "x", facts: "not array" } as unknown as SubagentResultFile;
+    const result = {
+      summary: "x",
+      currentWork: "x",
+      facts: "not array",
+    } as unknown as SubagentResultFile;
     expect(validateResultFile(result)).toBe(false);
   });
 
@@ -161,25 +176,35 @@ describe("SubagentRunner", () => {
   it("tracks active subagents", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
     expect(runner.getActive()).toHaveLength(0);
+    const id = runner.generateId();
+    expect(runner.getActive()).toEqual([id]);
   });
 
   it("getResultPath returns correct path", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
     const path = runner.getResultPath("test-123");
-    expect(path).toContain("hk-result-test-123.json");
+    expect(path).toBe(join(tmpDir, "hk-result-test-123.json"));
+  });
+
+  it("buildCommand writes the runner result path into the prompt", () => {
+    const runner = new SubagentRunner({ resultDir: tmpDir });
+    const built = runner.buildCommand({
+      id: "test-123",
+      task: "Fix bug",
+      executor: "claude",
+    });
+    expect(built.args.join("\n")).toContain(join(tmpDir, "hk-result-test-123.json"));
   });
 
   it("collectResult reads and validates result file", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
-    const id = "test-collect";
+    const id = runner.generateId();
     const resultPath = runner.getResultPath(id);
 
     const result: SubagentResultFile = {
       summary: "Task done",
       currentWork: "Modified files",
-      facts: [
-        { file: "src/a.ts", startLine: 1, endLine: 3, exactText: "hello" },
-      ],
+      facts: [{ file: "src/a.ts", startLine: 1, endLine: 3, exactText: "hello" }],
     };
     writeFileSync(resultPath, JSON.stringify(result), "utf-8");
 
@@ -188,6 +213,7 @@ describe("SubagentRunner", () => {
     expect(collected.block).toBeDefined();
     expect(collected.block!.currentWork).toBe("Modified files");
     expect(collected.block!.facts).toHaveLength(1);
+    expect(runner.getActive()).not.toContain(id);
   });
 
   it("collectResult returns error for missing file", () => {

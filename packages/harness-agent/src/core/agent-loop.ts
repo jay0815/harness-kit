@@ -27,7 +27,6 @@ export async function runAgentLoop(
   pipeline: MiddlewarePipeline,
   emit: AsyncEmit,
 ): Promise<AgentLoopResult> {
-  const messages: AgentMessage[] = [];
   const tokenUsage: TokenUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -52,8 +51,7 @@ export async function runAgentLoop(
     contextMessages = await config.transformContext(contextMessages, config.signal);
   }
 
-  state.context.messages = contextMessages;
-  messages.push(...contextMessages);
+  state.context.messages = [...contextMessages];
 
   while (budget.remaining > 0) {
     if (config.signal?.aborted) break;
@@ -95,12 +93,11 @@ export async function runAgentLoop(
     const afterResult = await pipeline.runAfterModel(state, response);
 
     if (afterResult.action === "retry") {
-      messages.push({
+      state.context.messages.push({
         role: "user",
         content: [{ type: "text", text: afterResult.feedback }],
         timestamp: Date.now(),
       } as AgentMessage);
-      state.context.messages = messages;
       budget.refund();
       continue;
     }
@@ -117,8 +114,10 @@ export async function runAgentLoop(
 
     if (toolCalls.length === 0) {
       // Pure text response — append and end
-      messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
-      state.context.messages = messages;
+      state.context.messages.push({
+        role: "assistant",
+        content: finalResponse.content,
+      } as AgentMessage);
       await emit({
         type: "turn_end",
         message: { role: "assistant", content: finalResponse.content } as AgentMessage,
@@ -135,9 +134,12 @@ export async function runAgentLoop(
     const shouldTerminate = toolResults.some((r) => r.terminate);
 
     // Append assistant message (with tool calls) and tool result messages
-    messages.push({ role: "assistant", content: finalResponse.content } as AgentMessage);
+    state.context.messages.push({
+      role: "assistant",
+      content: finalResponse.content,
+    } as AgentMessage);
     for (let i = 0; i < toolCalls.length; i++) {
-      messages.push({
+      state.context.messages.push({
         role: "toolResult",
         toolCallId: toolCalls[i].id,
         toolName: toolCalls[i].name,
@@ -147,7 +149,6 @@ export async function runAgentLoop(
         timestamp: Date.now(),
       } as AgentMessage);
     }
-    state.context.messages = messages;
 
     await emit({
       type: "turn_end",
@@ -163,10 +164,14 @@ export async function runAgentLoop(
     if (maxBackoff > 0) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, maxBackoff);
-        config.signal?.addEventListener("abort", () => {
-          clearTimeout(timer);
-          resolve();
-        }, { once: true });
+        config.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
       });
     }
 
@@ -176,7 +181,7 @@ export async function runAgentLoop(
         message: { role: "assistant", content: finalResponse.content } as AssistantMessage,
         toolResults,
         context: state.context,
-        newMessages: messages,
+        newMessages: state.context.messages,
       });
       if (shouldStop) break;
     }
@@ -185,8 +190,7 @@ export async function runAgentLoop(
     if (config.getSteeringMessages) {
       const steering = await config.getSteeringMessages();
       if (steering.length > 0) {
-        messages.push(...steering);
-        state.context.messages = messages;
+        state.context.messages.push(...steering);
       }
     }
 
@@ -194,8 +198,7 @@ export async function runAgentLoop(
     if (config.getFollowUpMessages) {
       const followUp = await config.getFollowUpMessages();
       if (followUp.length > 0) {
-        messages.push(...followUp);
-        state.context.messages = messages;
+        state.context.messages.push(...followUp);
       }
     }
 
@@ -203,7 +206,7 @@ export async function runAgentLoop(
     continue;
   }
 
-  return { messages, tokenUsage };
+  return { messages: state.context.messages, tokenUsage };
 }
 
 async function executeToolCalls(

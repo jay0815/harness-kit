@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import { runAgentLoop } from "./agent-loop.js";
 import { MiddlewarePipeline } from "./middleware.js";
 import { IterationBudget } from "./types.js";
-import type { AgentLoopConfig, AgentEvent, AgentTool, AgentToolResult } from "./types.js";
+import type {
+  AgentLoopConfig,
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  AgentToolResult,
+} from "./types.js";
 import { cast, getProp, mockModel } from "./test-utils.js";
 
 function makeBudget(max = 10): IterationBudget {
@@ -495,5 +501,61 @@ describe("runAgentLoop", () => {
     const lastTurnEnd = turnEnds[turnEnds.length - 1];
     expect(lastTurnEnd?.metadata).toBeDefined();
     expect(getProp<Record<string, unknown>>(lastTurnEnd, "metadata").tool_run).toBe(true);
+  });
+
+  it("preserves beforeModel message mutations as loop source of truth", async () => {
+    const initialMessages = Array.from({ length: 5 }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: [{ type: "text", text: `message ${i}` }],
+    })) as AgentMessage[];
+
+    const compactedMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "summary" }],
+      },
+      initialMessages[4],
+    ] as AgentMessage[];
+
+    const pipeline = new MiddlewarePipeline();
+    pipeline.register({
+      priority: 10,
+      name: "compact-test",
+      beforeModel: async (state) => {
+        state.context.messages.splice(0, state.context.messages.length, ...compactedMessages);
+      },
+    });
+
+    let llmMessageCount = 0;
+    const config: AgentLoopConfig = {
+      model: mockModel("test-model"),
+      systemPrompt: "test",
+      messages: initialMessages,
+      tools: [],
+      contextWindow: 200_000,
+      streamFn: cast<import("./types.js").StreamFn>(
+        async (_model: unknown, ctx: { messages: AgentMessage[] }) => {
+          llmMessageCount = ctx.messages.length;
+          return {
+            result: async () => ({
+              content: [{ type: "text", text: "done" }],
+              stopReason: "end_turn",
+              usage: { input: 10, output: 5 },
+            }),
+          };
+        },
+      ),
+    };
+
+    const result = await runAgentLoop(config, makeBudget(), pipeline, () => {});
+
+    expect(llmMessageCount).toBe(2);
+    expect(result.messages).toHaveLength(3);
+    expect(getProp<Array<Record<string, unknown>>>(result.messages[0], "content")[0].text).toBe(
+      "summary",
+    );
+    expect(getProp<Array<Record<string, unknown>>>(result.messages[1], "content")[0].text).toBe(
+      "message 4",
+    );
   });
 });
