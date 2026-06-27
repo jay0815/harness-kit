@@ -11,10 +11,10 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 ```
 ┌─────────────────────────────────────────────────┐
 │                   用户层                         │
-│  PI Agent / CLI REPL / Workflow YAML             │
+│  PI TUI / CLI REPL / Workflow YAML               │
 ├─────────────────────────────────────────────────┤
 │                 编排层                            │
-│  WorkflowExecutor / AgentLoop / Session          │
+│  WorkflowRunner / AgentLoop / Session            │
 ├─────────────────────────────────────────────────┤
 │                管道层                             │
 │  Middleware Pipeline (beforeModel/afterModel/    │
@@ -25,9 +25,10 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 ├─────────────────────────────────────────────────┤
 │                工具层                             │
 │  Tool Execution / Result Parser / Verifier       │
+│  SubagentRunner / Pane Manager                   │
 ├─────────────────────────────────────────────────┤
 │               基础设施                            │
-│  Telemetry / State / Pane Manager                │
+│  Telemetry / State / Error Recovery / Compaction │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -37,49 +38,147 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 |------|------|------|
 | **Standalone CLI** | `harness-agent` CLI | 独立运行，不依赖 PI，middleware 全量生效 |
 | **PI Extension** | `@harness-kit/core` | 在 PI 框架内运行，注入 workflow prompt、telemetry、sendUserMessage |
+| **WorkflowRunner** | `packages/core/src/workflow-runner.ts` | 编程式入口，支持 self/code/subagent executor |
 
-两种模式共享 `<HK_RESULT>` 作为唯一的 agent 输出边界。
+三种模式共享 `<HK_RESULT>` 作为唯一的 agent 输出边界。
 
-## 数据流
+## PI Extension 集成
 
-### Standalone 模式
+### 架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        PI TUI                                │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                 PI Agent Loop                        │    │
+│  │  ┌─────────────────────────────────────────────┐    │    │
+│  │  │         harness-kit Extension                │    │    │
+│  │  │  ┌───────────────────────────────────────┐  │    │    │
+│  │  │  │  session_start → init telemetry/state  │  │    │    │
+│  │  │  │  before_agent_start → inject workflow  │  │    │    │
+│  │  │  │  turn_end → auto-verify <HK_RESULT>   │  │    │    │
+│  │  │  │  session_shutdown → close telemetry    │  │    │    │
+│  │  │  └───────────────────────────────────────┘  │    │    │
+│  │  │  ┌───────────────────────────────────────┐  │    │    │
+│  │  │  │  Registered Tools                      │  │    │    │
+│  │  │  │  • hard_verify    • start_agent        │  │    │    │
+│  │  │  │  • acp_send       • acp_read           │  │    │    │
+│  │  │  └───────────────────────────────────────┘  │    │    │
+│  │  └─────────────────────────────────────────────┘    │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│   Xiaomi Mimo API   │
+│  (anthropic compat) │
+└─────────────────────┘
+```
+
+### 数据流
+
+```
+User → PI TUI → [system prompt injection] → LLM
+       PI TUI ← [LLM outputs <HK_RESULT>]
+       PI TUI → [turn_end auto-verify] → verifyFacts()
+       PI TUI → [FAIL?] → pi.sendUserMessage(error) → LLM self-corrects
+       PI TUI → [PASS?] → continue to next phase
+       PI TUI → report to user
+```
+
+### 启动命令
+
+```bash
+pi --provider xiaomi --model mimo-v2.5-pro --extension packages/core/dist/index.js
+```
+
+### 配置
+
+**~/.pi/agent/auth.json** — API key：
+```json
+{
+  "xiaomi": { "type": "api_key", "key": "your-token-plan-key" }
+}
+```
+
+**~/.pi/agent/models.json** — 端点覆盖（中国区）：
+```json
+{
+  "providers": {
+    "xiaomi": {
+      "baseUrl": "https://token-plan-cn.xiaomimimo.com/anthropic"
+    }
+  }
+}
+```
+
+## Standalone 模式数据流
 
 ```
 harness-agent CLI
   │
   ├─ session.start() → 创建 HarnessAgentSession
   ├─ session.prompt() → runAgentLoop
-  │    ├─ beforeModel chain (IntentGate, etc.)
+  │    ├─ beforeModel chain (IntentGate, Compaction, etc.)
   │    ├─ LLM call → stream.result()
   │    ├─ afterModel chain (FactVerification, QualityGate)
-  │    ├─ beforeTool chain (ToolCallGuardrail)
+  │    ├─ beforeTool chain (ToolCallGuardrail, ErrorRecovery)
   │    ├─ tool execution
   │    └─ afterTool chain (ChangeTracker, VerificationGuidance)
   └─ agent_end → session complete
 ```
 
-### PI Extension 模式
+## Subagent 调度
+
+### 架构图
 
 ```
-PI Agent (harness-kit extension)
-  │
-  ├─ before_agent_start → inject workflow system prompt
-  ├─ LLM executes phase → outputs <HK_RESULT> block
-  ├─ turn_end           → auto-verify facts against disk
-  │                        FAIL → pi.sendUserMessage() injects error
-  │                        PASS → continue to next phase
-  └─ hard_verify (tool)  → LLM can also verify voluntarily
+┌─────────────────────────────────────────────────────┐
+│                  主 Agent (harness)                   │
+│  ┌─────────────────────────────────────────────┐    │
+│  │  spawn_subagent tool                         │    │
+│  │  ├─ 构建 system prompt                       │    │
+│  │  ├─ 启动子进程                                │    │
+│  │  │   claude -p --settings ... "task"         │    │
+│  │  │   codex exec "task"                       │    │
+│  │  └─ 返回 subagent ID                         │    │
+│  └─────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────┐    │
+│  │  collect_result tool                         │    │
+│  │  ├─ 读取 /tmp/hk-result-{id}.json           │    │
+│  │  ├─ 验证 schema                              │    │
+│  │  └─ 返回结构化 ResultBlock                    │    │
+│  └─────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────┘
+         │                           │
+         ▼                           ▼
+┌─────────────────┐         ┌─────────────────┐
+│  claude -p      │         │  codex exec     │
+│  (subagent)     │         │  (subagent)     │
+│                 │         │                 │
+│  写入结果文件    │         │  写入结果文件    │
+│  /tmp/hk-*.json │         │  /tmp/hk-*.json │
+└─────────────────┘         └─────────────────┘
 ```
 
-### 降级模式数据流
+### 结果文件协议
 
-```
-User → PI Agent → [system prompt injection] → LLM
-       PI Agent ← [LLM outputs <HK_RESULT>]
-       PI Agent → [turn_end auto-verify] → verifyFacts()
-       PI Agent → [FAIL?] → pi.sendUserMessage(error) → LLM self-corrects
-       PI Agent → [PASS?] → continue to next phase
-       PI Agent → report to user
+Subagent 完成任务后写入 `/tmp/hk-result-{id}.json`：
+
+```json
+{
+  "summary": "任务完成摘要",
+  "currentWork": "当前完成的工作",
+  "facts": [
+    {
+      "file": "relative/path.ts",
+      "startLine": 10,
+      "endLine": 20,
+      "exactText": "exact text from file"
+    }
+  ],
+  "reasoning": "可选的推理过程"
+}
 ```
 
 ## 核心不变量
@@ -125,6 +224,41 @@ Phase end   → snapshotWorkspace() → after snapshot
 - `detectOutOfScope()` — 比较快照，过滤已声明文件，返回未声明变更
 - 仅信息性 — 不阻塞 phase 完成
 
+### Error Recovery
+
+结构化错误分类 + 恢复策略：
+
+```
+Tool error → classifyError() → ErrorType
+           → decideRecovery() → RecoveryAction
+           → RETRY_SAME / SWITCH_TOOL / WAIT_AND_RETRY / ABORT
+```
+
+| 错误类型 | 首次 | 持续 | 极端 |
+|----------|------|------|------|
+| TOOL_ERROR | RETRY_SAME | SWITCH_TOOL | 黑名单 |
+| TIMEOUT | WAIT_AND_RETRY | 指数退避 | — |
+| RESOURCE_EXHAUSTED | WAIT_AND_RETRY | 长退避 | — |
+| PERMISSION_DENIED | ABORT | — | — |
+| PARSE_ERROR | REDUCE_SCOPE | — | — |
+| UNKNOWN | RETRY_SAME | SWITCH_TOOL | ABORT(5次) |
+
+### Compaction
+
+动态上下文组装，当 token 使用量达到 75% 时触发：
+
+```
+Token usage >= 75% → CompactionMiddleware.beforeModel
+  ├── 保留最近 N 轮消息
+  ├── 移除旧消息
+  ├── 注入压缩摘要
+  └── 异步生成 wiki（后台 LLM 调用）
+```
+
+- `ContextEngine` 抽象类 — 可插拔的 compaction 策略
+- `WikiContextEngine` — 默认实现，wiki 双重角色（静态背景 + 动态记忆源）
+- `searchMemory` 工具 — LLM 可按需检索历史记忆
+
 ## 自定义工作流
 
 支持通过 YAML 配置定义工作流：
@@ -141,19 +275,22 @@ phases:
     executor: code
     command: "pnpm run lint"
 
-  - name: review
-    executor: llm
-    prompt: |
-      基于以下结果：
-      - lint: {{lint.output}}
+  - name: subagent-review
+    executor: subagent
+    subagentType: claude
+    subagentSettings: /path/to/settings.json
+    prompt: "审查代码质量"
+    constraints:
+      - "只读取，不修改"
 ```
 
 **执行器类型：**
 
 | 类型 | 说明 | 输出 |
 |------|------|------|
-| `llm` | LLM 执行，输出 `<HK_RESULT>` | LLM 文本输出 |
+| `self` | LLM 执行，输出 `<HK_RESULT>` | LLM 文本输出 |
 | `code` | 代码执行，确定性结果 | stdout/stderr |
+| `subagent` | 外部代理执行（claude/codex/script） | JSON 结果文件 |
 
 **特性：**
 - **Fail-stop** — 第一个 phase 失败即停止
@@ -174,6 +311,9 @@ phases:
 | Result parser | `core/result-block.ts` | 从 `<HK_RESULT>` 块提取 JSON |
 | Verifier | `core/verify.ts` | 读取文件、切片行号、逐字比对 |
 | Middlewares | `core/middlewares.ts` | VerificationGuidance, ToolCallGuardrail, QualityGate, IntentGate |
+| Error Recovery | `core/error-recovery/` | 错误分类 + 恢复策略 + 指数退避 |
+| Compaction | `core/compaction/` | ContextEngine, WikiContextEngine, WikiGenerator |
+| Subagent | `core/subagent/` | SubagentRunner, 文件协议, spawn/collect 工具 |
 | Session | `session/harness-session.ts` | HarnessAgentSession 封装完整生命周期 |
 | Event bridge | `session/event-bridge.ts` | PI 风格事件桥接 |
 | CLI entry | `cli.ts` | 独立 CLI 入口 |
@@ -194,8 +334,5 @@ phases:
 | Workflow loader | `src/workflow-loader.ts` | YAML 加载、验证、模板替换 |
 | Code executor | `src/code-executor.ts` | Shell command 和脚本执行 |
 | Workflow executor | `src/workflow-executor.ts` | Phase 编排、fail-stop、dry-run |
+| Workflow runner | `src/workflow-runner.ts` | 编程式入口，整合 session + extension + workflow |
 | Telemetry | `src/telemetry.ts` | JSONL 事件记录 |
-
-## 已知限制
-
-_（之前的 backoff 和 searchMemory scope 限制已修复。见 wiki/log.md。）_
