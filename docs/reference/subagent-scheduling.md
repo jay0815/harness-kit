@@ -1,68 +1,181 @@
-# Subagent 调度设计（待定）
+# Subagent 调度
 
-## 目标
+## 概述
 
-让 harness-kit 能调度外部编码代理（`claude -p`、`codex`）作为 subagent 执行任务。harness 负责"给足上下文、限定范围、让 subagent 只执行一件事"。
+harness-kit 支持将任务委托给外部编码代理（subagent）执行。主 agent（harness）负责调度和结果收集，subagent 专注执行单一任务。
 
-## 待回答的设计问题
-
-### 1. 上下文注入
-
-system prompt 怎么构造才能让 subagent 只做一件事？
-
-- 需要包含：任务描述、约束条件、输出格式要求（`<HK_RESULT>`）、禁止的操作范围
-- 项目上下文怎么给？直接塞进 system prompt 会太大，是否需要先让 harness 读取相关文件再注入？
-- harness 的 workflow 状态（当前 phase、已完成的 phases）怎么传递？
-
-### 2. 输出协议
-
-subagent 必须输出 `<HK_RESULT>` 块，但 Claude Code 没有原生支持这个格式。
-
-- **方案 A**：在 system prompt 中要求输出 `<HK_RESULT>`，依赖 Claude Code 的指令遵循能力
-- **方案 B**：harness 后处理 Claude Code 的输出，尝试提取事实声明
-- **方案 C**：注册一个自定义 MCP tool 让 Claude Code 主动调用（如 `report_result`）
-- 需要验证哪种方案最可靠
-
-### 3. 失败处理
-
-- subagent 超时（默认多久？可配置？）
-- 输出不含 `<HK_RESULT>`（重试？降级？报错？）
-- 结果有误（事实校验失败 → 反馈给 subagent 重试？还是回退给主 agent？）
-- subagent 进入死循环（iteration budget 由谁控制？harness 还是 subagent 自己？）
-
-### 4. 多 subagent 协调
-
-- 多个 subagent 之间的结果冲突怎么解决？
-- 是否需要 Agent A 做结果合并/冲突检测？
-- 并行执行 vs 串行执行的选择依据？
-
-## 初步方案（待细化）
+## 架构
 
 ```
 主 agent (harness)
   │
-  ├─ 构建 subagent context
-  │    ├── 任务描述（来自评估 agent 的 taskOverview）
-  │    ├── 约束条件（文件范围、禁止操作）
-  │    ├── 输出格式要求（<HK_RESULT> 模板）
-  │    └── 相关文件内容（harness 预读取）
+  ├─ spawn_subagent 工具
+  │    ├── 构建 system prompt（任务 + 约束 + 结果文件路径）
+  │    ├── 启动子进程（claude -p / codex exec / harness-agent / script）
+  │    └── 返回 subagent ID
   │
-  ├─ 启动 subagent
-  │    ├── claude -p --system-prompt "{constructed_prompt}" "{task}"
-  │    ├── 或 codex "{task}" --full-auto
-  │    └── timeout + iteration budget
+  ├─ subagent 执行任务...
+  │    └── 写入 /tmp/hk-result-{id}.json
   │
-  ├─ 收集输出
-  │    ├── 提取 <HK_RESULT> 块
-  │    ├── 事实校验（FactVerificationMiddleware）
-  │    └── 失败 → 反馈 + 重试（最多 N 次）
+  ├─ collect_result 工具
+  │    ├── 读取 JSON 文件
+  │    ├── 验证 schema
+  │    └── 返回结构化结果
   │
-  └─ 结果处理
-       ├── PASS → 继续下一个 phase
-       └── FAIL after retries → 报告给用户
+  └─ 主 agent 根据结果决定下一步
 ```
 
-## 相关文档
+## 支持的 Subagent 类型
 
-- [wiki/agent-runtime-plan.md](../../wiki/agent-runtime-plan.md) — Subagent 调度设计章节
-- [wiki/design-decisions.md](../../wiki/design-decisions.md) — 关键决策
+| 类型 | 命令 | 适用场景 |
+|------|------|----------|
+| `claude` | `claude -p [--settings ...] "任务"` | 复杂编码任务 |
+| `codex` | `codex exec "任务"` | OpenAI 模型任务 |
+| `harness-agent` | `harness-agent --prompt "任务"` | 递归调用自身 |
+| `script` | 自定义命令 | 任意脚本/工具 |
+
+## 结果文件协议
+
+Subagent 完成任务后，将结果以 JSON 格式写入约定路径：
+
+**路径**: `/tmp/hk-result-{subagentId}.json`
+
+**格式**:
+```json
+{
+  "summary": "任务完成摘要",
+  "currentWork": "当前完成的工作",
+  "facts": [
+    {
+      "file": "relative/path/to/file.ts",
+      "startLine": 10,
+      "endLine": 20,
+      "exactText": "exact text from the file"
+    }
+  ],
+  "reasoning": "可选的推理过程"
+}
+```
+
+**字段说明**:
+- `summary` (必填): 任务完成的简要描述
+- `currentWork` (必填): 当前完成工作的详细描述
+- `facts` (必填): 文件引用数组，每个引用包含文件路径、行号范围、精确文本
+- `reasoning` (可选): 推理过程
+
+## 使用方式
+
+### 方式 1: 通过 Session 工具
+
+```typescript
+const session = new HarnessAgentSession({
+  // ... existing config
+  enableSubagent: true,
+  subagentSettingsPath: "/path/to/settings.json",
+});
+
+// 主 agent 可以调用:
+// spawn_subagent({ task: "...", executor: "claude", constraints: [...] })
+// collect_result({ subagentId: "..." })
+```
+
+### 方式 2: 通过 WorkflowRunner
+
+```typescript
+const runner = new WorkflowRunner({
+  // ... existing config
+  enableSubagent: true,
+  subagentSettingsPath: "/path/to/settings.json",
+});
+```
+
+**Workflow YAML 配置**:
+```yaml
+workflow: feature-work
+phases:
+  - name: design
+    executor: subagent
+    subagentType: claude
+    subagentSettings: /path/to/settings.json
+    subagentTimeoutMs: 120000
+    prompt: "设计认证模块的实现方案"
+    constraints:
+      - "只修改 src/auth/ 目录"
+      - "不要修改现有测试"
+
+  - name: implement
+    executor: self
+    prompt: "根据设计方案实现代码"
+```
+
+### 方式 3: 直接使用 SubagentRunner
+
+```typescript
+import { SubagentRunner } from "@harness-kit/agent";
+
+const runner = new SubagentRunner();
+
+// 生成 ID 和构建命令
+const id = runner.generateId();
+const { command, args } = runner.buildCommand({
+  id,
+  task: "Fix the login bug",
+  executor: "claude",
+  settingsPath: "/path/to/settings.json",
+});
+
+// 启动子进程（手动管理）
+const proc = spawn(command, args);
+
+// 收集结果
+const result = runner.collectResult(id);
+if (result.success) {
+  console.log(result.block); // ResultBlock
+}
+```
+
+## 失败处理
+
+| 场景 | 处理方式 |
+|------|----------|
+| 超时 | `collect_result` 返回 `errorType: "timeout"` |
+| 无结果文件 | `collect_result` 返回 `errorType: "no_result"` |
+| JSON 格式错误 | `collect_result` 返回 `errorType: "invalid_json"` |
+| Schema 验证失败 | `collect_result` 返回 `errorType: "invalid_schema"` |
+| 进程崩溃 | `collect_result` 返回 `errorType: "process_crashed"` |
+
+## 配置项
+
+### HarnessAgentSessionConfig
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enableSubagent` | `boolean` | `false` | 启用 subagent 工具 |
+| `subagentSettingsPath` | `string` | - | claude subagent 的 settings 文件路径 |
+
+### WorkflowRunnerConfig
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enableSubagent` | `boolean` | `false` | 启用 subagent 支持 |
+| `subagentSettingsPath` | `string` | - | 默认 settings 文件路径 |
+
+### Phase (Workflow YAML)
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `executor` | `"subagent"` | 使用 subagent 执行 |
+| `subagentType` | `"claude"` \| `"codex"` \| `"harness-agent"` \| `"script"` | subagent 类型 |
+| `subagentConstraints` | `string[]` | 约束条件 |
+| `subagentTimeoutMs` | `number` | 超时时间（毫秒） |
+| `subagentSettings` | `string` | settings 文件路径（覆盖全局配置） |
+
+## 相关代码
+
+| 文件 | 说明 |
+|------|------|
+| `packages/harness-agent/src/core/subagent/types.ts` | 类型定义 |
+| `packages/harness-agent/src/core/subagent/subagent-runner.ts` | SubagentRunner 核心 |
+| `packages/harness-agent/src/core/subagent/subagent-tools.ts` | spawn_subagent + collect_result 工具 |
+| `packages/harness-agent/src/core/subagent/subagent-runner.test.ts` | 测试（20 个用例） |
+| `packages/core/src/workflow-runner.ts` | WorkflowRunner subagent executor 集成 |

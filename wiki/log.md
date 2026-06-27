@@ -408,3 +408,39 @@ harness-kit run
 ```
 
 Extension 函数本身未修改 — 它已经基于 `HarnessExtensionAPI` 接口编码，`HarnessAgentSession` 实现了这个接口。
+
+## [2026-06-27] feat | Subagent 调度 — 文件协议 + 工具集成
+
+**Subagent 调度框架完成**，支持将任务委托给外部编码代理执行。
+
+### 核心设计
+
+- **文件协议**: subagent 完成任务后将结果写入 `/tmp/hk-result-{id}.json`
+- **工具驱动**: 主 agent 通过 `spawn_subagent` 和 `collect_result` 工具管理 subagent
+- **Schema 验证**: 结果 JSON 必须匹配 SubagentResultFile schema
+
+### 实现
+
+- `SubagentRunner` — ID 生成、命令构建、结果收集、schema 验证
+- `subagent-tools.ts` — `spawn_subagent` + `collect_result` 工具工厂
+- `harness-session.ts` — `enableSubagent` + `subagentSettingsPath` 配置
+- `workflow-runner.ts` — `executor: "subagent"` 支持，spawn 进程 + 等待结果文件
+- `types.ts` — SubagentTask、SubagentResult、SubagentResultFile 类型
+
+### Subagent 类型
+
+| 类型 | 命令 |
+|------|------|
+| `claude` | `claude -p [--settings ...] "任务"` |
+| `codex` | `codex exec "任务"` |
+| `harness-agent` | `harness-agent --prompt "任务"` |
+| `script` | 自定义命令 |
+
+### 测试
+
+- 20 个新测试（prompt 生成、文件解析、schema 验证、结果收集、错误处理）
+- 总计 449 个测试全部通过
+
+### 文档
+
+- `docs/reference/subagent-scheduling.md` — 完整使用文档（已从"待定"更新为"已实现"）
