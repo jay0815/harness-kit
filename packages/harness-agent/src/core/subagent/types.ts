@@ -47,5 +47,7 @@ export interface CollectResultParams {
   subagentId: string;
 }
 
+import { tmpdir } from "node:os";
+
 export const DEFAULT_TIMEOUT_MS = 300_000;
-export const RESULT_DIR = "/tmp";
+export const RESULT_DIR = tmpdir();

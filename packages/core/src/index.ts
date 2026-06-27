@@ -78,11 +78,28 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
     try {
       saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
+
+      // Save state before mutating in-memory state
+      const prevStatus = phase.status;
+      const prevCompletedAt = phase.completedAt;
+      const prevPhase = harnessState.currentPhase;
+      const prevUpdatedAt = harnessState.updatedAt;
+
       phase.status = "completed";
       phase.completedAt = new Date().toISOString();
       harnessState.currentPhase++;
       harnessState.updatedAt = new Date().toISOString();
-      saveState(harnessState, workspaceDir);
+
+      try {
+        saveState(harnessState, workspaceDir);
+      } catch (saveErr) {
+        // Rollback in-memory state on save failure
+        phase.status = prevStatus;
+        phase.completedAt = prevCompletedAt;
+        harnessState.currentPhase = prevPhase;
+        harnessState.updatedAt = prevUpdatedAt;
+        throw saveErr;
+      }
       emit("state", "phase_completed", {
         phase: harnessState.currentPhase - 1,
         name: phase.name,

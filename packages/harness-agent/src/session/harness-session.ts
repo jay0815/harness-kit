@@ -126,7 +126,7 @@ export class HarnessAgentSession {
           } as AgentMessage);
         }
 
-        const baseTools: AgentTool[] = this.config.tools ?? [];
+        const baseTools: AgentTool[] = [...(this.config.tools ?? [])];
 
         // 注册 search_memory 工具（如果配置了 contextEngine）
         if (this.config.contextEngine) {

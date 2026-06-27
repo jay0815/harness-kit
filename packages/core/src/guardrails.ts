@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { SnapshotEntry } from "./types.js";
 
 const SKIP_DIRS = new Set([".git", ".harness-kit", "node_modules"]);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB - skip files larger than this
 
 export type WorkspaceSnapshot = Map<string, SnapshotEntry>;
 
@@ -31,6 +32,8 @@ function walkDir(root: string, dir: string, snapshot: WorkspaceSnapshot): void {
       const relPath = relative(root, fullPath);
       try {
         const st = statSync(fullPath);
+        // Skip files larger than MAX_FILE_SIZE to avoid blocking the event loop
+        if (st.size > MAX_FILE_SIZE) continue;
         const content = readFileSync(fullPath);
         const sha256 = createHash("sha256").update(content).digest("hex");
         // Use mtimeNs if available (Node 22+), otherwise convert from mtimeMs with better precision
@@ -51,7 +54,8 @@ export function detectOutOfScope(
   after: WorkspaceSnapshot,
   declaredFiles: string[],
 ): string[] {
-  const declared = new Set(declaredFiles);
+  // Normalize declared files to match snapshot key format (remove leading ./)
+  const declared = new Set(declaredFiles.map((f) => f.replace(/^\.\//, "")));
   const allKeys = new Set([...before.keys(), ...after.keys()]);
   const outOfScope: string[] = [];
 

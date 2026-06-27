@@ -15,6 +15,7 @@ export interface SubagentRunnerConfig {
 export class SubagentRunner {
   private resultDir: string;
   private counter = 0;
+  private activeTasks = new Set<string>();
 
   constructor(config: SubagentRunnerConfig = {}) {
     this.resultDir = config.resultDir ?? RESULT_DIR;
@@ -22,7 +23,9 @@ export class SubagentRunner {
 
   generateId(): string {
     this.counter++;
-    return `${Date.now().toString(36)}-${this.counter}`;
+    const id = `${Date.now().toString(36)}-${this.counter}`;
+    this.activeTasks.add(id);
+    return id;
   }
 
   getResultPath(subagentId: string): string {
@@ -30,7 +33,7 @@ export class SubagentRunner {
   }
 
   getActive(): string[] {
-    return [];
+    return [...this.activeTasks];
   }
 
   collectResult(subagentId: string): SubagentResult {
@@ -75,6 +78,8 @@ export class SubagentRunner {
     } catch {
       // ignore cleanup errors
     }
+
+    this.activeTasks.delete(subagentId);
 
     return {
       success: true,

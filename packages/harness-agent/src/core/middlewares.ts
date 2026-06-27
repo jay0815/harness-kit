@@ -65,7 +65,7 @@ export class VerificationGuidanceMiddleware implements AgentMiddleware {
  * - No-progress loops (idempotent tools returning same result)
  */
 export class ToolCallGuardrailMiddleware implements AgentMiddleware {
-  priority = PRIORITY_GUARD;
+  priority = PRIORITY_GUARD + 2;
   name = "ToolCallGuardrail";
 
   private turnFailures: Map<string, number> = new Map();

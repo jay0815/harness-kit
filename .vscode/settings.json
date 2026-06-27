@@ -9,5 +9,7 @@
     "oxfmt",
     "oxlint",
     "typebox"
-  ]
+  ],
+  "vitest.vitestPackagePath": "github-repo/pi-mono/node_modules/vitest/package.json",
+  "vitest.configSearchPatternInclude": "github-repo/pi-mono/**/*vitest*.config*.{ts,js,mjs,cjs,cts,mts}"
 }

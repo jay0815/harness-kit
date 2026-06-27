@@ -65,10 +65,13 @@ export function startAgentInPane(paneId: string, command: string): void {
 
 /**
  * Send a text message to a pane (no Enter).
+ * Strips ANSI escape sequences to prevent terminal injection.
  */
 export function typeToPane(paneId: string, text: string): void {
+  // Strip ANSI escape sequences to prevent terminal injection
+  const sanitized = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
   bridge(["read", paneId, "5"]);
-  bridge(["type", paneId, text]);
+  bridge(["type", paneId, sanitized]);
 }
 
 /**

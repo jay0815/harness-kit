@@ -161,7 +161,13 @@ export async function runAgentLoop(
     // Backoff: wait if any tool requested a delay (e.g., rate-limit recovery)
     const maxBackoff = Math.max(0, ...toolResults.map((r) => r.backoffMs ?? 0));
     if (maxBackoff > 0) {
-      await new Promise((resolve) => setTimeout(resolve, maxBackoff));
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, maxBackoff);
+        config.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
     }
 
     // Check shouldStopAfterTurn

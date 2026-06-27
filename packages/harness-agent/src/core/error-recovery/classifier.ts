@@ -52,6 +52,8 @@ const RESOURCE_PATTERNS = [
 ];
 
 export function classifyError(toolName: string, errorMessage: string): ErrorType {
+  // toolName reserved for future tool-specific classification rules
+  void toolName;
   const msg = errorMessage || "";
 
   for (const pattern of TIMEOUT_PATTERNS) {

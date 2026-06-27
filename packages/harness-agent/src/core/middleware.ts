@@ -23,7 +23,12 @@ export class MiddlewarePipeline {
   async runBeforeModel(state: RuntimeState): Promise<void> {
     for (const mw of this.middlewares) {
       if (mw.beforeModel) {
-        await mw.beforeModel(state);
+        try {
+          await mw.beforeModel(state);
+        } catch (err) {
+          // Log but don't crash - middleware errors should not break the loop
+          console.error(`[middleware] Error in ${mw.name}.beforeModel:`, err);
+        }
       }
     }
   }

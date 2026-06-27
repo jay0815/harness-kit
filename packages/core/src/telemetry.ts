@@ -46,7 +46,11 @@ export function emit(
     data,
     ...(durationMs !== undefined && { durationMs }),
   };
-  appendFileSync(fd, JSON.stringify(event) + "\n");
+  try {
+    appendFileSync(fd, JSON.stringify(event) + "\n");
+  } catch {
+    // Silently drop events if write fails (disk full, permissions, etc.)
+  }
 }
 
 export function flush(): void {
