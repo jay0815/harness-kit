@@ -444,3 +444,47 @@ Extension 函数本身未修改 — 它已经基于 `HarnessExtensionAPI` 接口
 ### 文档
 
 - `docs/reference/subagent-scheduling.md` — 完整使用文档（已从"待定"更新为"已实现"）
+
+## [2026-06-27] verify | PI Extension 集成验证（Xiaomi Mimo v2.5-pro）
+
+**PI Extension 集成验证通过**，harness-kit 在 PI TUI 中完整工作。
+
+### 环境
+
+| 组件 | 版本/配置 |
+|------|-----------|
+| PI | v0.72.0（pi-mono） |
+| Provider | xiaomi（Token Plan 中国区） |
+| Model | mimo-v2.5-pro |
+| API | anthropic-messages |
+| Endpoint | https://token-plan-cn.xiaomimimo.com/anthropic |
+| Context | 1M tokens |
+
+### 配置
+
+- `~/.pi/agent/auth.json` — xiaomi API key
+- `~/.pi/agent/models.json` — 覆盖 baseUrl 为中国区端点
+- `npm link` — 全局安装 pi 命令
+
+### 验证项目
+
+| 验证项 | 结果 |
+|--------|------|
+| Extension 加载 | ✅ 无冲突 |
+| 工具注册（5 个） | ✅ hard_verify, start_agent, acp_send, acp_read, search_memory |
+| `hard_verify` 调用 | ✅ PASS |
+| `<HK_RESULT>` 输出 | ✅ 结构化事实 |
+| 事实校验（3 个文件引用） | ✅ 全部通过 |
+| LLM 自主流程 | ✅ 读取→验证→输出 |
+
+### 启动命令
+
+```bash
+pi --provider xiaomi --model mimo-v2.5-pro --extension packages/core/dist/index.js
+```
+
+### 关键发现
+
+- PI 内置 xiaomi provider 使用阿姆斯特丹端点（`token-plan-ams`），中国区需要通过 `models.json` 覆盖为 `token-plan-cn`
+- `mimo-v2.5-pro` 模型在 PI 中可用（1M context, reasoning 支持）
+- harness-kit 的 `turn_end` handler 正确拦截 `<HK_RESULT>` 并自动校验事实
