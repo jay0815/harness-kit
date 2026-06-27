@@ -16,3 +16,5 @@ export {
   validateResultFile,
   type SubagentRunnerConfig,
 } from "./subagent-runner.js";
+
+export { createSubagentTools, type SubagentToolsConfig } from "./subagent-tools.js";

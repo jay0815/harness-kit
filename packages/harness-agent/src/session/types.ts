@@ -202,4 +202,8 @@ export interface HarnessAgentSessionConfig {
   contextEngine?: import("../core/compaction/context-engine.js").ContextEngine;
   /** Error recovery configuration. If provided, ErrorRecoveryMiddleware is auto-registered. */
   errorRecovery?: import("../core/error-recovery/types.js").ErrorRecoveryConfig;
+  /** Enable subagent tools (spawn_subagent, collect_result). */
+  enableSubagent?: boolean;
+  /** Settings file path for claude subagent executor. */
+  subagentSettingsPath?: string;
 }

@@ -4,6 +4,7 @@ import { MiddlewarePipeline } from "../core/middleware.js";
 import { FactVerificationMiddleware } from "../core/fact-verification.js";
 import { CompactionMiddleware } from "../core/compaction/compaction-middleware.js";
 import { ErrorRecoveryMiddleware } from "../core/error-recovery/error-recovery-middleware.js";
+import { createSubagentTools } from "../core/subagent/subagent-tools.js";
 import { evaluateTaskWithSource } from "../core/evaluator.js";
 import { runAgentLoop } from "../core/agent-loop.js";
 import type {
@@ -158,6 +159,14 @@ export class HarnessAgentSession {
               };
             },
           });
+        }
+
+        // 注册 subagent 工具（如果启用）
+        if (this.config.enableSubagent) {
+          const subagentTools = createSubagentTools({
+            settingsPath: this.config.subagentSettingsPath,
+          });
+          baseTools.push(...subagentTools);
         }
 
         const ctxFactory = () => this.makeExtensionContext();
