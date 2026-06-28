@@ -2,10 +2,11 @@ import type { HarnessExtensionAPI } from "@harness-kit/agent";
 import { extractResultBlock, verifyFacts, FACT_VERIFICATION_KEY } from "@harness-kit/agent";
 import type { FactVerificationMetadata, ResultBlock } from "@harness-kit/agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
-import { createCompletePhaseTool } from "./phase-tool.js";
+import { createCompletePhaseTool, createConfirmPhaseTool } from "./phase-tool.js";
+import { PhaseScheduler } from "./phase-scheduler.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
-import { reconcileFromDisk, initState, saveArtifact, saveState } from "./state.js";
+import { reconcileFromDisk, initState } from "./state.js";
 import { snapshotWorkspace, detectOutOfScope } from "./guardrails.js";
 import type { HarnessState } from "./types.js";
 
@@ -65,6 +66,13 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       },
     }),
   );
+  pi.registerTool(
+    createConfirmPhaseTool({
+      workflow,
+      getState: () => harnessState,
+      getWorkspaceDir: () => workspaceDir,
+    }),
+  );
 
   // Register all legacy harness-kit tools
   for (const tool of harnessKitTools) {
@@ -77,11 +85,22 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       return;
     }
 
-    const phase = harnessState.phases[harnessState.currentPhase];
+    if (harnessState.awaitingHuman) {
+      emit("turn", "fallback_skipped", {
+        reason: "awaiting_human_confirmation",
+        completedPhase: harnessState.awaitingHuman.phaseName,
+        currentPhase: harnessState.currentPhase,
+      });
+      return;
+    }
+
+    const phase = workflow.phases[harnessState.currentPhase];
+    if (!phase) return;
 
     // Guardrails: check for out-of-scope file changes
+    let afterSnapshot: ReturnType<typeof snapshotWorkspace> | null = null;
     if (phaseSnapshot) {
-      const afterSnapshot = snapshotWorkspace(workspaceDir);
+      afterSnapshot = snapshotWorkspace(workspaceDir);
       const declaredFiles = block.facts.map((f) => f.file);
       const outOfScope = detectOutOfScope(phaseSnapshot, afterSnapshot, declaredFiles);
 
@@ -92,37 +111,30 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
           files: outOfScope,
         });
       }
-
-      phaseSnapshot = afterSnapshot;
     }
 
     try {
-      saveArtifact(harnessState.currentPhase, phase.name, block, workspaceDir);
-
-      // Save state before mutating in-memory state
-      const prevStatus = phase.status;
-      const prevCompletedAt = phase.completedAt;
-      const prevPhase = harnessState.currentPhase;
-      const prevUpdatedAt = harnessState.updatedAt;
-
-      phase.status = "completed";
-      phase.completedAt = new Date().toISOString();
-      harnessState.currentPhase++;
-      harnessState.updatedAt = new Date().toISOString();
-
-      try {
-        saveState(harnessState, workspaceDir);
-      } catch (saveErr) {
-        // Rollback in-memory state on save failure
-        phase.status = prevStatus;
-        phase.completedAt = prevCompletedAt;
-        harnessState.currentPhase = prevPhase;
-        harnessState.updatedAt = prevUpdatedAt;
-        throw saveErr;
+      const scheduler = new PhaseScheduler({ workflow, state: harnessState, workspaceDir });
+      const scheduled = scheduler.submitPhaseResult({ phaseName: phase.name, result: block });
+      if (!scheduled.ok) {
+        emit("state", "phase_rejected", {
+          phase: harnessState.currentPhase,
+          phaseName: phase.name,
+          reason: scheduled.reason,
+          source: "turn_end_fallback",
+        });
+        return;
       }
+
+      if (afterSnapshot) {
+        phaseSnapshot = afterSnapshot;
+      }
+
       emit("state", "phase_completed", {
         phase: harnessState.currentPhase - 1,
         name: phase.name,
+        status: scheduled.status,
+        source: "turn_end_fallback",
       });
     } catch (err) {
       emit("state", "save_failed", {
@@ -301,12 +313,35 @@ function buildHarnessPrompt(
   state: HarnessState | null,
 ): string {
   const currentPhaseIndex = Math.min(state?.currentPhase ?? 0, workflow.phases.length);
-  const currentPhase = workflow.phases[currentPhaseIndex];
   const completedPhases =
     state?.phases
       .slice(0, currentPhaseIndex)
       .map((phase) => `- ${phase.name} (completed)`)
       .join("\n") || "- none";
+
+  if (state?.awaitingHuman) {
+    const gate = state.awaitingHuman;
+    const nextPhase = workflow.phases[gate.nextPhaseIndex];
+    const nextPhaseName = nextPhase?.name ?? "workflow completion";
+
+    return `## harness-kit Phase Scheduler
+
+Workflow: ${workflow.name}
+${workflow.description}
+
+Completed phases:
+${completedPhases}
+
+Workflow is paused for human confirmation.
+Completed gated phase: **${gate.phaseName}**
+Next phase after approval: **${nextPhaseName}**
+
+Do not execute the next phase yet. Do not call \`complete_phase\` while this gate is active.
+If the user explicitly approves continuing, call \`confirm_phase\` with phaseName: "${gate.phaseName}".
+If the user asks for changes instead, keep the gate active and respond to the user's requested changes.`;
+  }
+
+  const currentPhase = workflow.phases[currentPhaseIndex];
 
   if (!currentPhase) {
     return `## harness-kit Phase Scheduler

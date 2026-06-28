@@ -10,7 +10,13 @@ import {
   closeSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { HarnessState, PhaseState, ResultBlock, Workflow } from "./types.js";
+import type {
+  AwaitingHumanState,
+  HarnessState,
+  PhaseState,
+  ResultBlock,
+  Workflow,
+} from "./types.js";
 
 const STATE_DIR = ".harness-kit";
 const PHASES_DIR = "phases";
@@ -95,12 +101,13 @@ export function saveArtifact(
 }
 
 export function reconcileFromDisk(workspaceDir: string, totalPhases?: number): HarnessState | null {
+  const loadedState = loadState(workspaceDir);
   const dir = phasesDir(workspaceDir);
   let entries: string[];
   try {
     entries = readdirSync(dir).filter((f) => f.endsWith(".json"));
   } catch {
-    return loadState(workspaceDir);
+    return loadedState;
   }
 
   const phases: PhaseState[] = [];
@@ -124,9 +131,9 @@ export function reconcileFromDisk(workspaceDir: string, totalPhases?: number): H
     }
   }
 
-  if (phases.length === 0) return loadState(workspaceDir);
+  if (phases.length === 0) return loadedState;
 
-  const count = totalPhases ?? phases.length;
+  const count = totalPhases ?? Math.max(phases.length, loadedState?.phases.length ?? 0);
   for (let i = 0; i < count; i++) {
     if (!phases[i]) {
       phases[i] = { name: `phase-${i}`, status: "pending" };
@@ -134,15 +141,33 @@ export function reconcileFromDisk(workspaceDir: string, totalPhases?: number): H
   }
 
   const now = new Date().toISOString();
+  const currentPhase = maxCompleted + 1;
   const state: HarnessState = {
     schemaVersion: 1,
     workspaceDir,
-    createdAt: now,
+    createdAt: loadedState?.createdAt ?? now,
     updatedAt: now,
-    currentPhase: maxCompleted + 1,
+    currentPhase,
     phases,
   };
+  const awaitingHuman = preserveAwaitingHuman(loadedState?.awaitingHuman, currentPhase, phases);
+  if (awaitingHuman) {
+    state.awaitingHuman = awaitingHuman;
+  }
 
   saveState(state, workspaceDir);
   return state;
+}
+
+function preserveAwaitingHuman(
+  gate: AwaitingHumanState | undefined,
+  currentPhase: number,
+  phases: PhaseState[],
+): AwaitingHumanState | undefined {
+  if (!gate) return undefined;
+  if (gate.phaseIndex < 0 || gate.phaseIndex >= phases.length) return undefined;
+  if (gate.nextPhaseIndex !== currentPhase) return undefined;
+  if (gate.nextPhaseIndex < 0 || gate.nextPhaseIndex > phases.length) return undefined;
+  if (phases[gate.phaseIndex]?.status !== "completed") return undefined;
+  return gate;
 }

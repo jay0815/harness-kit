@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { createCompletePhaseTool } from "./phase-tool.js";
+import { createCompletePhaseTool, createConfirmPhaseTool } from "./phase-tool.js";
 import { snapshotWorkspace, type WorkspaceSnapshot } from "./guardrails.js";
 import { initState } from "./state.js";
 import type { HarnessState, ResultBlock, Workflow } from "./types.js";
@@ -181,6 +181,76 @@ describe("complete_phase tool", () => {
       nextPhase: "implement",
     });
     expect(state.currentPhase).toBe(1);
+    expect(state.awaitingHuman).toMatchObject({
+      phaseIndex: 0,
+      phaseName: "design",
+      nextPhaseIndex: 1,
+      nextPhaseName: "implement",
+    });
+
+    const savedState = JSON.parse(
+      readFileSync(join(workspaceDir, ".harness-kit", "state.json"), "utf-8"),
+    );
+    expect(savedState.awaitingHuman).toMatchObject({
+      phaseIndex: 0,
+      phaseName: "design",
+      nextPhaseIndex: 1,
+      nextPhaseName: "implement",
+    });
+  });
+
+  it("clears awaiting human and returns the next phase after confirmation", async () => {
+    const humanWorkflow: Workflow = {
+      ...workflow,
+      phases: [{ ...workflow.phases[0], humanConfirm: true }, workflow.phases[1]],
+    };
+    state = initState(humanWorkflow, workspaceDir);
+    phaseSnapshot = snapshotWorkspace(workspaceDir);
+    writeWorkspaceFile("src/a.ts", "export const a = 1;\n");
+
+    const completeTool = createCompletePhaseTool({
+      workflow: humanWorkflow,
+      getState: () => state,
+      getWorkspaceDir: () => workspaceDir,
+      getPhaseSnapshot: () => phaseSnapshot,
+      setPhaseSnapshot: (next) => {
+        phaseSnapshot = next;
+      },
+    });
+    await completeTool.execute(
+      "tc-human",
+      { phaseName: "design", result: makeResultBlock() },
+      undefined,
+      undefined,
+      { cwd: workspaceDir, shutdown: () => {} },
+    );
+
+    const confirmTool = createConfirmPhaseTool({
+      workflow: humanWorkflow,
+      getState: () => state,
+      getWorkspaceDir: () => workspaceDir,
+    });
+    const result = await confirmTool.execute(
+      "tc-confirm",
+      { phaseName: "design" },
+      undefined,
+      undefined,
+      { cwd: workspaceDir, shutdown: () => {} },
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.details).toMatchObject({
+      status: "HUMAN_CONFIRMED",
+      completedPhase: "design",
+      nextPhase: "implement",
+      nextPrompt: "implement it",
+    });
+    expect(state.awaitingHuman).toBeUndefined();
+
+    const savedState = JSON.parse(
+      readFileSync(join(workspaceDir, ".harness-kit", "state.json"), "utf-8"),
+    );
+    expect(savedState.awaitingHuman).toBeUndefined();
   });
 
   it("rejects out-of-order phase completion without advancing", async () => {

@@ -64,12 +64,15 @@ describe("core turn_end handler — metadata path", () => {
     harnessKitExtension = mod.default;
   });
 
-  it("registers complete_phase tool for scheduler-driven completion", () => {
+  it("registers scheduler tools for gated phase control", () => {
     const pi = createMockPI();
     harnessKitExtension(pi);
 
     expect(pi.registerTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "complete_phase" }),
+    );
+    expect(pi.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "confirm_phase" }),
     );
   });
 
@@ -89,7 +92,7 @@ describe("core turn_end handler — metadata path", () => {
     expect(result?.systemPrompt).not.toContain("2. **implement**");
   });
 
-  it("injects recovered current phase with completed phase summary", () => {
+  it("injects awaiting-human prompt after a gated phase completes", () => {
     const pi = createMockPI();
     harnessKitExtension(pi);
     pi.handlers["session_start"]?.({}, { cwd: tmpDir });
@@ -113,11 +116,59 @@ describe("core turn_end handler — metadata path", () => {
       { cwd: tmpDir },
     ) as { systemPrompt?: string } | undefined;
 
-    expect(result?.systemPrompt).toContain("Completed phases:");
+    expect(result?.systemPrompt).toContain("Workflow is paused for human confirmation.");
     expect(result?.systemPrompt).toContain("- design (completed)");
+    expect(result?.systemPrompt).toContain("Completed gated phase: **design**");
+    expect(result?.systemPrompt).toContain("Next phase after approval: **implement**");
+    expect(result?.systemPrompt).toContain("confirm_phase");
+    expect(result?.systemPrompt).not.toContain("Current phase: **implement**");
+    expect(result?.systemPrompt).not.toContain('phaseName: "implement"');
+    expect(result?.systemPrompt).not.toContain("Current phase: **design**");
+  });
+
+  it("injects next phase after human confirmation clears the gate", async () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+    pi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    writeFileSync(join(tmpDir, "auth.ts"), "const auth = () => {}\n");
+    const block = {
+      currentWork: "completed design",
+      facts: [{ file: "auth.ts", startLine: 1, endLine: 1, exactText: "const auth = () => {}" }],
+    };
+
+    const completeResult = await pi.tools["complete_phase"].execute(
+      "tc-complete",
+      { phaseName: "design", result: block },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(completeResult.details).toMatchObject({ status: "AWAITING_HUMAN" });
+
+    const blockedPrompt = pi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
+    expect(blockedPrompt?.systemPrompt).toContain("Workflow is paused for human confirmation.");
+    expect(blockedPrompt?.systemPrompt).not.toContain("Current phase: **implement**");
+
+    const confirmResult = await pi.tools["confirm_phase"].execute(
+      "tc-confirm",
+      { phaseName: "design" },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(confirmResult.details).toMatchObject({ status: "HUMAN_CONFIRMED" });
+
+    const result = pi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
     expect(result?.systemPrompt).toContain("Current phase: **implement**");
     expect(result?.systemPrompt).toContain('phaseName: "implement"');
-    expect(result?.systemPrompt).not.toContain("Current phase: **design**");
+    expect(result?.systemPrompt).not.toContain("Workflow is paused for human confirmation.");
   });
 
   it("with agentMeta.status=pass, does not call verifyFacts, does not sendUserMessage", () => {

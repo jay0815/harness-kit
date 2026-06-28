@@ -29,7 +29,12 @@ export const completePhaseSchema = Type.Object({
   result: resultBlockSchema,
 });
 
+export const confirmPhaseSchema = Type.Object({
+  phaseName: Type.String({ description: "Name of the completed phase being confirmed" }),
+});
+
 export type CompletePhaseParams = Static<typeof completePhaseSchema>;
+export type ConfirmPhaseParams = Static<typeof confirmPhaseSchema>;
 
 export interface CompletePhaseToolOptions {
   workflow: Workflow;
@@ -43,6 +48,14 @@ export interface CompletePhaseToolOptions {
   detectOutOfScope?: typeof defaultDetectOutOfScope;
   emit?: typeof defaultEmit;
   onPhaseCompleted?: () => void;
+}
+
+export interface ConfirmPhaseToolOptions {
+  workflow: Workflow;
+  getState(): HarnessState | null;
+  getWorkspaceDir(): string;
+  persistence?: Partial<SchedulerPersistence>;
+  emit?: typeof defaultEmit;
 }
 
 export function createCompletePhaseTool(
@@ -64,6 +77,17 @@ export function createCompletePhaseTool(
       const state = options.getState();
       if (!state) {
         return errorResult("STATE_UNAVAILABLE", "Harness state is not initialized.");
+      }
+
+      if (state.awaitingHuman) {
+        return errorResult(
+          "AWAITING_HUMAN",
+          `Workflow is paused for human confirmation after phase "${state.awaitingHuman.phaseName}". Call confirm_phase only after the user approves continuing.`,
+          {
+            completedPhase: state.awaitingHuman.phaseName,
+            nextPhase: state.awaitingHuman.nextPhaseName,
+          },
+        );
       }
 
       const workspaceDir = options.getWorkspaceDir();
@@ -141,23 +165,24 @@ export function createCompletePhaseTool(
           source: "complete_phase",
         });
 
+        if (scheduled.status === "awaiting_human") {
+          const completedPhaseName = scheduled.completedPhase?.name ?? params.phaseName;
+          return successResult(
+            "AWAITING_HUMAN",
+            `Phase "${completedPhaseName}" completed. Ask the user for confirmation before continuing.`,
+            {
+              completedPhase: completedPhaseName,
+              nextPhase: scheduled.nextPhase?.name,
+              artifactPath: scheduled.artifactPath,
+            },
+          );
+        }
+
         if (scheduled.status === "workflow_completed") {
           return successResult("WORKFLOW_COMPLETED", "Workflow completed.", {
             completedPhase: scheduled.completedPhase?.name,
             artifactPath: scheduled.artifactPath,
           });
-        }
-
-        if (scheduled.completedPhase?.humanConfirm) {
-          return successResult(
-            "AWAITING_HUMAN",
-            `Phase "${scheduled.completedPhase.name}" completed. Ask the user for confirmation before continuing.`,
-            {
-              completedPhase: scheduled.completedPhase.name,
-              nextPhase: scheduled.nextPhase?.name,
-              artifactPath: scheduled.artifactPath,
-            },
-          );
         }
 
         return successResult(
@@ -174,6 +199,71 @@ export function createCompletePhaseTool(
         return errorResult(
           "PERSIST_FAILED",
           `Failed to persist phase completion: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+  };
+}
+
+export function createConfirmPhaseTool(
+  options: ConfirmPhaseToolOptions,
+): ToolDefinition<typeof confirmPhaseSchema> {
+  const emit = options.emit ?? defaultEmit;
+
+  return {
+    name: "confirm_phase",
+    label: "Confirm Phase",
+    description:
+      "Clear a scheduler human-confirmation gate after the user explicitly approves continuing.",
+    parameters: confirmPhaseSchema,
+    execute: async (_toolCallId, params: ConfirmPhaseParams) => {
+      const state = options.getState();
+      if (!state) {
+        return errorResult("STATE_UNAVAILABLE", "Harness state is not initialized.");
+      }
+
+      const scheduler = new PhaseScheduler({
+        workflow: options.workflow,
+        state,
+        workspaceDir: options.getWorkspaceDir(),
+        persistence: options.persistence,
+      });
+
+      try {
+        const scheduled = scheduler.confirmAwaitingHuman({ phaseName: params.phaseName });
+        if (!scheduled.ok) {
+          return errorResult("CONFIRM_REJECTED", scheduled.reason, {
+            expectedPhase: scheduled.expectedPhase,
+            actualPhase: scheduled.actualPhase,
+          });
+        }
+
+        emit("state", "human_confirmed", {
+          completedPhase: scheduled.completedPhase?.name,
+          nextPhase: scheduled.nextPhase?.name,
+        });
+
+        if (scheduled.status === "workflow_completed") {
+          return successResult("WORKFLOW_COMPLETED", "Workflow completed.", {
+            completedPhase: scheduled.completedPhase?.name,
+            artifactPath: scheduled.artifactPath,
+          });
+        }
+
+        return successResult(
+          "HUMAN_CONFIRMED",
+          `Human confirmation accepted. Next phase: "${scheduled.nextPhase?.name}".`,
+          {
+            completedPhase: scheduled.completedPhase?.name,
+            nextPhase: scheduled.nextPhase?.name,
+            nextPrompt: scheduled.nextPhase?.prompt,
+            artifactPath: scheduled.artifactPath,
+          },
+        );
+      } catch (err) {
+        return errorResult(
+          "PERSIST_FAILED",
+          `Failed to persist human confirmation: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },

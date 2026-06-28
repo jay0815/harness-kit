@@ -48,6 +48,15 @@ export interface PhaseState {
   completedAt?: string;
 }
 
+export interface AwaitingHumanState {
+  phaseIndex: number;
+  phaseName: string;
+  nextPhaseIndex: number;
+  nextPhaseName?: string;
+  requestedAt: string;
+  artifactPath?: string;
+}
+
 export interface SnapshotEntry {
   size: number;
   mtimeNs: bigint;
@@ -61,5 +70,6 @@ export interface HarnessState {
   updatedAt: string;
   currentPhase: number;
   phases: PhaseState[];
+  awaitingHuman?: AwaitingHumanState;
   phaseSnapshot?: Record<string, SnapshotEntry>;
 }

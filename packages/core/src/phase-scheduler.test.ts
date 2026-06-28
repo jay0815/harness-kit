@@ -27,6 +27,11 @@ const workflow: Workflow = {
   ],
 };
 
+const humanWorkflow: Workflow = {
+  ...workflow,
+  phases: [{ ...workflow.phases[0], humanConfirm: true }, workflow.phases[1]],
+};
+
 const resultBlock: ResultBlock = {
   currentWork: "finished design",
   facts: [{ file: "src/a.ts", startLine: 1, endLine: 1, exactText: "export const a = 1;" }],
@@ -99,6 +104,64 @@ describe("PhaseScheduler", () => {
     expect(persisted.phases[0].status).toBe("completed");
     expect(persisted.phases[0].artifactPath).toBe(".harness-kit/phases/0-design.json");
     expect(existsSync(join(workspaceDir, ".harness-kit", "phases", "0-design.json"))).toBe(true);
+  });
+
+  it("persists awaiting human gate after completing a gated phase", () => {
+    const state = initState(humanWorkflow, workspaceDir);
+    const scheduler = new PhaseScheduler({ workflow: humanWorkflow, state, workspaceDir });
+
+    const result = scheduler.submitPhaseResult({
+      phaseName: "design",
+      result: resultBlock,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("awaiting_human");
+    if (result.ok) {
+      expect(result.completedPhase?.name).toBe("design");
+      expect(result.nextPhase?.name).toBe("implement");
+    }
+    expect(state.currentPhase).toBe(1);
+    expect(state.awaitingHuman).toMatchObject({
+      phaseIndex: 0,
+      phaseName: "design",
+      nextPhaseIndex: 1,
+      nextPhaseName: "implement",
+    });
+
+    const persisted = JSON.parse(
+      readFileSync(join(workspaceDir, ".harness-kit", "state.json"), "utf-8"),
+    );
+    expect(persisted.awaitingHuman).toMatchObject({
+      phaseIndex: 0,
+      phaseName: "design",
+      nextPhaseIndex: 1,
+      nextPhaseName: "implement",
+    });
+
+    const start = scheduler.startCurrentPhase();
+    expect(start.ok).toBe(true);
+    expect(start.status).toBe("awaiting_human");
+  });
+
+  it("clears awaiting human gate after confirmation", () => {
+    const state = initState(humanWorkflow, workspaceDir);
+    const scheduler = new PhaseScheduler({ workflow: humanWorkflow, state, workspaceDir });
+
+    scheduler.submitPhaseResult({ phaseName: "design", result: resultBlock });
+    const confirmed = scheduler.confirmAwaitingHuman({ phaseName: "design" });
+
+    expect(confirmed.ok).toBe(true);
+    expect(confirmed.status).toBe("running_phase");
+    if (confirmed.ok) {
+      expect(confirmed.currentPhase?.name).toBe("implement");
+    }
+    expect(state.awaitingHuman).toBeUndefined();
+
+    const persisted = JSON.parse(
+      readFileSync(join(workspaceDir, ".harness-kit", "state.json"), "utf-8"),
+    );
+    expect(persisted.awaitingHuman).toBeUndefined();
   });
 
   it("reports workflow_completed after the final phase", () => {
@@ -239,5 +302,25 @@ describe("resumePhaseScheduler", () => {
     expect(scheduler.state.currentPhase).toBe(1);
     expect(phase?.name).toBe("implement");
     expect(scheduler.state.phases[0].status).toBe("completed");
+  });
+
+  it("preserves awaiting human gate when reconciling from disk", () => {
+    const state = initState(humanWorkflow, workspaceDir);
+    const scheduler = new PhaseScheduler({ workflow: humanWorkflow, state, workspaceDir });
+
+    scheduler.submitPhaseResult({ phaseName: "design", result: resultBlock });
+
+    const resumed = resumePhaseScheduler({ workflow: humanWorkflow, workspaceDir });
+    const start = resumed.startCurrentPhase();
+
+    expect(resumed.state.currentPhase).toBe(1);
+    expect(resumed.state.awaitingHuman).toMatchObject({
+      phaseIndex: 0,
+      phaseName: "design",
+      nextPhaseIndex: 1,
+      nextPhaseName: "implement",
+    });
+    expect(start.ok).toBe(true);
+    expect(start.status).toBe("awaiting_human");
   });
 });
