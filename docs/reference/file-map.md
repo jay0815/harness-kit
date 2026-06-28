@@ -107,7 +107,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/index.ts` | Extension entry — 当前注册工具、注入 workflow prompt、turn_end 自动验证 + telemetry；目标承载 phase scheduler |
+| `src/index.ts` | Extension entry — 注册工具、注入 current-phase scheduler prompt、turn_end fallback + telemetry |
 | `src/index.test.ts` | Extension 测试 |
 | `src/phase-tool.ts` | `complete_phase` 工具，执行 fact verification、guardrail 和 scheduler 推进 |
 | `src/phase-tool.test.ts` | `complete_phase` 工具测试 |

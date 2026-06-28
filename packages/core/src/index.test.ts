@@ -67,6 +67,53 @@ describe("core turn_end handler — metadata path", () => {
     );
   });
 
+  it("injects only the current phase and complete_phase contract", () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+    pi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    const result = pi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
+
+    expect(result?.systemPrompt).toContain("Current phase: **design**");
+    expect(result?.systemPrompt).toContain("complete_phase");
+    expect(result?.systemPrompt).toContain('phaseName: "design"');
+    expect(result?.systemPrompt).not.toContain("2. **implement**");
+  });
+
+  it("injects recovered current phase with completed phase summary", () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+    pi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    writeFileSync(join(tmpDir, "auth.ts"), "const auth = () => {}\n");
+    const agentMeta: FactVerificationMetadata = {
+      status: "pass",
+      block: {
+        currentWork: "completed design",
+        facts: [{ file: "auth.ts", startLine: 1, endLine: 1, exactText: "const auth = () => {}" }],
+      },
+      report: null,
+      timestamp: Date.now(),
+    };
+    pi.handlers["turn_end"]?.(
+      makeTurnEndEvent({ metadata: { [FACT_VERIFICATION_KEY]: agentMeta } }),
+    );
+
+    const result = pi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
+
+    expect(result?.systemPrompt).toContain("Completed phases:");
+    expect(result?.systemPrompt).toContain("- design (completed)");
+    expect(result?.systemPrompt).toContain("Current phase: **implement**");
+    expect(result?.systemPrompt).toContain('phaseName: "implement"');
+    expect(result?.systemPrompt).not.toContain("Current phase: **design**");
+  });
+
   it("with agentMeta.status=pass, does not call verifyFacts, does not sendUserMessage", () => {
     const pi = createMockPI();
     harnessKitExtension(pi);

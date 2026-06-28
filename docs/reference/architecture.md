@@ -46,7 +46,7 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 
 PI Extension 不替换 PI agent loop。PI 继续负责模型调用、消息历史、tool calling 和 UI；harness-kit 作为控制面负责 phase 边界、校验、状态推进、人工确认和持久化。
 
-当前实现仍保留 prompt-driven workflow 和 `turn_end` 自动校验。目标形态是 tool-gated scheduler：模型完成当前 phase 后调用 `complete_phase`，由 harness-kit 决定是否推进。
+当前实现已注册 `complete_phase` 并注入 current-phase scheduler prompt；`turn_end` 自动校验仍作为 legacy fallback 保留到后续迭代。目标形态是 tool-gated scheduler：模型完成当前 phase 后调用 `complete_phase`，由 harness-kit 决定是否推进。
 
 ### 架构图
 
@@ -360,7 +360,7 @@ phases:
 
 | 组件 | 文件 | 职责 |
 |------|------|------|
-| Extension entry | `src/index.ts` | 当前注册工具、注入 workflow prompt、turn_end fallback + telemetry；目标承载 scheduler 推进 |
+| Extension entry | `src/index.ts` | 注册工具、注入 current-phase scheduler prompt、turn_end fallback + telemetry |
 | Tool definitions | `src/tools.ts`, `src/phase-tool.ts` | PI tools: complete_phase, start_agent, acp_send, acp_read, hard_verify |
 | Pane manager | `src/pane.ts` | tmux/bridge subprocess 调用 |
 | Guardrails | `src/guardrails.ts` | Workspace 快照和越权文件检测 |

@@ -19,7 +19,6 @@ import type { HarnessState } from "./types.js";
  */
 export default function harnessKitExtension(pi: HarnessExtensionAPI) {
   const workflow = createDefaultWorkflow();
-  const harnessPrompt = buildHarnessPrompt(workflow);
   let workspaceDir = process.cwd();
   let harnessState: HarnessState | null = null;
   let phaseSnapshot: ReturnType<typeof snapshotWorkspace> | null = null;
@@ -258,15 +257,11 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
   // Inject harness-kit workflow instructions into system prompt
   pi.on("before_agent_start", (event) => {
-    let combined = event.systemPrompt + "\n\n" + harnessPrompt;
+    const schedulerPrompt = buildHarnessPrompt(workflow, harnessState);
+    const combined = event.systemPrompt + "\n\n" + schedulerPrompt;
 
     if (harnessState && harnessState.currentPhase > 0) {
-      const completed = harnessState.phases
-        .slice(0, harnessState.currentPhase)
-        .map((p) => `  ✓ ${p.name} (completed)`)
-        .join("\n");
-      const current = harnessState.phases[harnessState.currentPhase]?.name ?? "unknown";
-      combined += `\n\n### Session Recovery\nPreviously completed phases:\n${completed}\n\nResume from: **${current}** (phase ${harnessState.currentPhase + 1}).`;
+      const current = workflow.phases[harnessState.currentPhase]?.name ?? "complete";
 
       emit("prompt", "recovery_injected", {
         completedPhases: harnessState.currentPhase,
@@ -276,7 +271,7 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
     emit("prompt", "system_injected", {
       originalLength: event.systemPrompt.length,
-      harnessPromptLength: harnessPrompt.length,
+      harnessPromptLength: schedulerPrompt.length,
       combinedLength: combined.length,
     });
 
@@ -284,49 +279,73 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
   });
 }
 
-function buildHarnessPrompt(workflow: ReturnType<typeof createDefaultWorkflow>): string {
-  const phaseList = workflow.phases
-    .map((p, i) => {
-      const confirm = p.humanConfirm ? " [human confirm required]" : "";
-      return `${i + 1}. **${p.name}**${confirm}: ${p.prompt}`;
-    })
-    .join("\n");
+function buildHarnessPrompt(
+  workflow: ReturnType<typeof createDefaultWorkflow>,
+  state: HarnessState | null,
+): string {
+  const currentPhaseIndex = Math.min(state?.currentPhase ?? 0, workflow.phases.length);
+  const currentPhase = workflow.phases[currentPhaseIndex];
+  const completedPhases =
+    state?.phases
+      .slice(0, currentPhaseIndex)
+      .map((phase) => `- ${phase.name} (completed)`)
+      .join("\n") || "- none";
 
-  return `## harness-kit Workflow
+  if (!currentPhase) {
+    return `## harness-kit Phase Scheduler
 
-You are a coding agent guided by a structured workflow. Complete each phase in order.
-
-### Workflow: ${workflow.name}
+Workflow: ${workflow.name}
 ${workflow.description}
 
-### Phases
-${phaseList}
+Completed phases:
+${completedPhases}
 
-### How to work
+The workflow is complete. Do not start additional workflow phases.`;
+  }
 
-1. **Execute each phase** by reading context files, writing code, and producing results.
+  const humanConfirm = currentPhase.humanConfirm ? "yes" : "no";
 
-2. **After each phase**, output a \`<HK_RESULT>\` block:
-   \`\`\`
-   <HK_RESULT>
-   {
-     "currentWork": "what you did in this phase",
-     "facts": [
-       { "file": "relative/path.ts", "startLine": 1, "endLine": 5, "exactText": "exact text from file" }
-     ],
-     "reasoning": "optional notes"
-   }
-   </HK_RESULT>
-   \`\`\`
+  return `## harness-kit Phase Scheduler
 
-3. **Verify your facts** with \`hard_verify\` before moving to the next phase.
+You are working under a scheduler-controlled workflow. Execute only the current phase. Do not start future phases or decide the next phase yourself.
 
-4. **If human confirmation is required**, pause and ask the user before proceeding.
+### Workflow
+${workflow.name}
+${workflow.description}
+
+### Completed phases:
+${completedPhases}
+
+### Current phase
+Current phase: **${currentPhase.name}** (phase ${currentPhaseIndex + 1} of ${workflow.phases.length})
+
+Instruction:
+${currentPhase.prompt}
+
+Human confirmation after this phase: ${humanConfirm}
+
+### Completion contract
+
+When this phase is complete, call \`complete_phase\` with phaseName: "${currentPhase.name}" and a ResultBlock:
+
+\`\`\`json
+{
+  "phaseName": "${currentPhase.name}",
+  "result": {
+    "currentWork": "what you did in this phase",
+    "facts": [
+      { "file": "relative/path.ts", "startLine": 1, "endLine": 5, "exactText": "exact text from file" }
+    ],
+    "reasoning": "optional notes"
+  }
+}
+\`\`\`
 
 ### Rules
 
 - Every \`fact\` must cite real file content: exact file path, line range, and text.
-- Run \`hard_verify\` on your own facts. If FAIL, fix the issue before continuing.
-- The \`<HK_RESULT>\` block is your ONLY structured output boundary.
-- Work through all phases sequentially. Do not skip phases.`;
+- Do not complete a different phase. The only accepted phaseName is "${currentPhase.name}".
+- Do not output standalone \`<HK_RESULT>\` as the completion mechanism; call \`complete_phase\`.
+- If \`complete_phase\` returns an error, fix the current phase and call it again.
+- Do not skip phases or continue to the next phase until harness-kit returns the next instruction.`;
 }
