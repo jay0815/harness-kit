@@ -16,4 +16,12 @@ describe("createDefaultWorkflow", () => {
     expect(wf.phases[1].humanConfirm).toBe(false);
     expect(wf.phases[2].humanConfirm).toBe(true);
   });
+
+  it("does not ask PI scheduler phases to output legacy HK_RESULT blocks", () => {
+    const wf = createDefaultWorkflow();
+    for (const phase of wf.phases) {
+      expect(phase.prompt).not.toContain("<HK_RESULT>");
+      expect(phase.prompt).not.toContain("</HK_RESULT>");
+    }
+  });
 });

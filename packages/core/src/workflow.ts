@@ -15,7 +15,7 @@ export function createDefaultWorkflow(): Workflow {
         prompt:
           "Read the task requirements. Design the implementation: " +
           "what files to create/modify, what functions to write, what the API looks like. " +
-          "Output your design in a <HK_RESULT> block with facts for every file you reference.",
+          "Prepare facts for every file you reference so the scheduler can verify the phase result.",
         contextFiles: [],
         humanConfirm: true,
       },
@@ -24,7 +24,7 @@ export function createDefaultWorkflow(): Workflow {
         executor: "self",
         prompt:
           "Implement the design. Create/modify the files. " +
-          "Output a <HK_RESULT> block with facts for every file you created or modified. " +
+          "Prepare facts for every file you created or modified. " +
           "Each fact must cite the exact text that exists on disk after your changes.",
         contextFiles: [],
         humanConfirm: false,
@@ -34,8 +34,7 @@ export function createDefaultWorkflow(): Workflow {
         executor: "self",
         prompt:
           "Write unit tests and run them. Fix any failures. " +
-          "Output a <HK_RESULT> block with facts for test files you created, " +
-          "and report test results (pass/fail count).",
+          "Prepare facts for test files you created and report test results (pass/fail count).",
         contextFiles: [],
         humanConfirm: true,
       },
