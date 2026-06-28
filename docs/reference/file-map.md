@@ -115,6 +115,8 @@
 | `src/pane.test.ts` | Pane 测试（10 个用例） |
 | `src/guardrails.ts` | Workspace 快照和越权文件检测 |
 | `src/guardrails.test.ts` | Guardrails 测试 |
+| `src/phase-scheduler.ts` | Scheduler core，管理 currentPhase、phase completion 和恢复 |
+| `src/phase-scheduler.test.ts` | Scheduler core 测试 |
 | `src/state.ts` | 状态管理（持久化、reconcileFromDisk） |
 | `src/state.test.ts` | 状态管理测试 |
 | `src/workflow-schema.ts` | TypeBox schemas for custom workflows |

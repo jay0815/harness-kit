@@ -364,6 +364,7 @@ phases:
 | Tool definitions | `src/tools.ts` | 当前 PI tools: start_agent, acp_send, acp_read, hard_verify；scheduler path 将增加 complete_phase |
 | Pane manager | `src/pane.ts` | tmux/bridge subprocess 调用 |
 | Guardrails | `src/guardrails.ts` | Workspace 快照和越权文件检测 |
+| Phase scheduler | `src/phase-scheduler.ts` | Scheduler core，管理 currentPhase、phase completion 和恢复 |
 | Workflow schema | `src/workflow-schema.ts` | TypeBox schemas for custom workflows |
 | Workflow loader | `src/workflow-loader.ts` | YAML 加载、验证、模板替换 |
 | Code executor | `src/code-executor.ts` | Shell command 和脚本执行 |
