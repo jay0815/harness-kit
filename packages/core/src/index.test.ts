@@ -58,6 +58,15 @@ describe("core turn_end handler — metadata path", () => {
     harnessKitExtension = mod.default;
   });
 
+  it("registers complete_phase tool for scheduler-driven completion", () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+
+    expect(pi.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "complete_phase" }),
+    );
+  });
+
   it("with agentMeta.status=pass, does not call verifyFacts, does not sendUserMessage", () => {
     const pi = createMockPI();
     harnessKitExtension(pi);

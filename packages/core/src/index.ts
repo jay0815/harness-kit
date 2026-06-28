@@ -2,6 +2,7 @@ import type { HarnessExtensionAPI } from "@harness-kit/agent";
 import { extractResultBlock, verifyFacts, FACT_VERIFICATION_KEY } from "@harness-kit/agent";
 import type { FactVerificationMetadata, ResultBlock } from "@harness-kit/agent";
 import { harnessKitTools, setWorkspaceDir } from "./tools.js";
+import { createCompletePhaseTool } from "./phase-tool.js";
 import { createDefaultWorkflow } from "./workflow.js";
 import { initTelemetry, close as closeTelemetry, emit } from "./telemetry.js";
 import { reconcileFromDisk, initState, saveArtifact, saveState } from "./state.js";
@@ -46,7 +47,19 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
     closeTelemetry();
   });
 
-  // Register all harness-kit tools
+  pi.registerTool(
+    createCompletePhaseTool({
+      workflow,
+      getState: () => harnessState,
+      getWorkspaceDir: () => workspaceDir,
+      getPhaseSnapshot: () => phaseSnapshot,
+      setPhaseSnapshot: (snapshot) => {
+        phaseSnapshot = snapshot;
+      },
+    }),
+  );
+
+  // Register all legacy harness-kit tools
   for (const tool of harnessKitTools) {
     pi.registerTool(tool);
   }

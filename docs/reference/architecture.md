@@ -361,7 +361,7 @@ phases:
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | Extension entry | `src/index.ts` | 当前注册工具、注入 workflow prompt、turn_end fallback + telemetry；目标承载 scheduler 推进 |
-| Tool definitions | `src/tools.ts` | 当前 PI tools: start_agent, acp_send, acp_read, hard_verify；scheduler path 将增加 complete_phase |
+| Tool definitions | `src/tools.ts`, `src/phase-tool.ts` | PI tools: complete_phase, start_agent, acp_send, acp_read, hard_verify |
 | Pane manager | `src/pane.ts` | tmux/bridge subprocess 调用 |
 | Guardrails | `src/guardrails.ts` | Workspace 快照和越权文件检测 |
 | Phase scheduler | `src/phase-scheduler.ts` | Scheduler core，管理 currentPhase、phase completion 和恢复 |
