@@ -416,3 +416,148 @@ describe("core turn_end handler — metadata path", () => {
     expect(state.phases[0].status).toBe("pending");
   });
 });
+
+describe("PI extension scheduler E2E", () => {
+  let harnessKitExtension: (pi: HarnessExtensionAPI) => void;
+
+  beforeEach(async () => {
+    const mod = await import("./index.js");
+    harnessKitExtension = mod.default;
+  });
+
+  it("runs the default workflow through human gates and restart recovery", async () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+    pi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    writeFileSync(join(tmpDir, "design.md"), "design approved\n");
+    const designBlock = {
+      currentWork: "completed design",
+      facts: [
+        {
+          file: "design.md",
+          startLine: 1,
+          endLine: 1,
+          exactText: "design approved",
+        },
+      ],
+    };
+
+    const designResult = await pi.tools["complete_phase"].execute(
+      "tc-design",
+      { phaseName: "design", result: designBlock },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(designResult.details).toMatchObject({
+      status: "AWAITING_HUMAN",
+      completedPhase: "design",
+      nextPhase: "implement",
+    });
+
+    const restartedPi = createMockPI();
+    harnessKitExtension(restartedPi);
+    restartedPi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    const blockedPrompt = restartedPi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
+    expect(blockedPrompt?.systemPrompt).toContain("Workflow is paused for human confirmation.");
+    expect(blockedPrompt?.systemPrompt).toContain("Completed gated phase: **design**");
+    expect(blockedPrompt?.systemPrompt).not.toContain("Current phase: **implement**");
+
+    const designConfirm = await restartedPi.tools["confirm_phase"].execute(
+      "tc-confirm-design",
+      { phaseName: "design" },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(designConfirm.details).toMatchObject({
+      status: "HUMAN_CONFIRMED",
+      nextPhase: "implement",
+    });
+
+    writeFileSync(join(tmpDir, "src.ts"), "export const feature = true;\n");
+    const implementResult = await restartedPi.tools["complete_phase"].execute(
+      "tc-implement",
+      {
+        phaseName: "implement",
+        result: {
+          currentWork: "implemented feature",
+          facts: [
+            {
+              file: "src.ts",
+              startLine: 1,
+              endLine: 1,
+              exactText: "export const feature = true;",
+            },
+          ],
+        },
+      },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(implementResult.details).toMatchObject({
+      status: "PHASE_COMPLETED",
+      completedPhase: "implement",
+      nextPhase: "test",
+    });
+
+    writeFileSync(join(tmpDir, "src.test.ts"), "expect(feature).toBe(true);\n");
+    const testResult = await restartedPi.tools["complete_phase"].execute(
+      "tc-test",
+      {
+        phaseName: "test",
+        result: {
+          currentWork: "tested feature",
+          facts: [
+            {
+              file: "src.test.ts",
+              startLine: 1,
+              endLine: 1,
+              exactText: "expect(feature).toBe(true);",
+            },
+          ],
+        },
+      },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(testResult.details).toMatchObject({
+      status: "AWAITING_HUMAN",
+      completedPhase: "test",
+    });
+
+    const finalConfirm = await restartedPi.tools["confirm_phase"].execute(
+      "tc-confirm-test",
+      { phaseName: "test" },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(finalConfirm.details).toMatchObject({
+      status: "WORKFLOW_COMPLETED",
+      completedPhase: "test",
+    });
+
+    const finalPrompt = restartedPi.handlers["before_agent_start"]?.(
+      { systemPrompt: "base" },
+      { cwd: tmpDir },
+    ) as { systemPrompt?: string } | undefined;
+    expect(finalPrompt?.systemPrompt).toContain("The workflow is complete.");
+
+    const state = JSON.parse(readFileSync(join(tmpDir, ".harness-kit", "state.json"), "utf-8"));
+    expect(state.currentPhase).toBe(3);
+    expect(state.awaitingHuman).toBeUndefined();
+    expect(state.phases.map((phase: { status: string }) => phase.status)).toEqual([
+      "completed",
+      "completed",
+      "completed",
+    ]);
+  });
+});

@@ -7,6 +7,7 @@
 **症状**：依赖安装失败。
 
 **解决**：
+
 ```bash
 rm -rf node_modules packages/*/node_modules
 pnpm install
@@ -17,11 +18,13 @@ pnpm install
 **症状**：TypeScript 编译错误。
 
 **解决**：
+
 ```bash
 pnpm run typecheck        # 查看具体类型错误
 ```
 
 常见原因：
+
 - 依赖未安装：先运行 `pnpm install`
 - 类型定义过期：检查 `@earendil-works/*` 包版本
 
@@ -40,6 +43,7 @@ pnpm run typecheck        # 查看具体类型错误
 **症状**：`No API key found for provider "xxx"`。
 
 **解决**：
+
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
 # 或对应的 provider key
@@ -56,6 +60,7 @@ export ANTHROPIC_API_KEY="sk-..."
 **症状**：tmux 相关错误。
 
 **解决**：
+
 ```bash
 # macOS
 brew install tmux
@@ -69,10 +74,12 @@ apt install tmux
 **症状**：agent 已经完成工作，但 `.harness-kit/state.json` 中的 `currentPhase` 没有变化。
 
 **解决**：
+
 - 当前兼容路径下，检查 assistant 输出是否包含可解析的 `<HK_RESULT>`。
 - scheduler path 下，检查是否调用了 `complete_phase`。
 - 检查 facts 是否通过硬校验；校验失败时 phase 必须停留在当前阶段。
 - 检查 guardrail 事件是否报告了未声明文件变更。
+- 如果 `.harness-kit/state.json` 中存在 `awaitingHuman`，当前 phase 已完成但 workflow 正在等待用户确认；确认继续后调用 `confirm_phase`。
 
 ## 测试问题
 
@@ -81,6 +88,7 @@ apt install tmux
 **症状**：测试长时间无响应。
 
 **解决**：
+
 - 检查是否有网络调用未 mock
 - 检查是否有死锁
 
@@ -97,6 +105,7 @@ apt install tmux
 ### `pnpm run lint` 报错
 
 **解决**：
+
 ```bash
 pnpm run lint:fix         # 自动修复
 ```
@@ -104,6 +113,7 @@ pnpm run lint:fix         # 自动修复
 ### `pnpm run fmt:check` 报错
 
 **解决**：
+
 ```bash
 pnpm run fmt              # 自动格式化
 ```

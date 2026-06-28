@@ -14,13 +14,16 @@
 **症状**：agent 运行但不产出结果，状态一直是 PENDING。
 
 **原因**：
+
 - 当前兼容路径：LLM 没有输出 `<HK_RESULT>` 块。
 - 目标 scheduler path：LLM 没有调用 `complete_phase`，或者 `complete_phase` 拒绝了当前 phase completion。
 
 **排查**：
+
 - 检查 LLM 输出中是否包含 `<HK_RESULT>` 标签
 - 检查是否出现 `complete_phase` 工具调用
 - 检查 `.harness-kit/state.json` 中的 `currentPhase`
+- 如果存在 `awaitingHuman`，说明 scheduler 正在等待用户确认；确认继续后应调用 `confirm_phase`
 - 检查 system prompt 是否正确注入
 - 尝试切换到更 capable 的模型
 
@@ -29,10 +32,12 @@
 **症状**：agent 反复输出 `<HK_RESULT>` 但校验一直 FAIL。
 
 **原因**：
+
 - LLM 编造了不存在的文件引用
 - LLM 的行号/内容与实际文件不匹配
 
 **排查**：
+
 - 使用 `--verify warn` 模式查看失败详情
 - 检查 `state.metadata["fact_verification"]` 中的校验结果
 - scheduler path 下检查 `complete_phase` 的 tool result
@@ -45,6 +50,7 @@
 **原因**：不同 provider 的 toolCall 格式不一致（`input` vs `arguments`）。
 
 **排查**：
+
 - 检查 `tool-utils.ts` 中的 `extractToolArgs` 函数
 - 确认 provider 返回的是 `input` 还是 `arguments` 字段
 
@@ -53,6 +59,7 @@
 **症状**：在 PI 中运行但 harness-kit 功能不生效。
 
 **排查**：
+
 - 确认 `--no-extension` 未设置
 - 检查 PI 的 extension 加载日志
 - 确认 `@harness-kit/core` 已正确构建
@@ -62,6 +69,7 @@
 ### 遥测事件
 
 遥测事件写入 JSONL 文件，包含：
+
 - 校验结果
 - Guardrail 检测结果
 - Phase 转换和 scheduler 决策
@@ -75,6 +83,7 @@ pnpm run test:e2e         # E2E 测试（需要 tmux）
 ```
 
 单个包的测试：
+
 ```bash
 cd packages/harness-agent && pnpm run test
 cd packages/core && pnpm run test
