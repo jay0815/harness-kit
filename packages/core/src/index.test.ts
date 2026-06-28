@@ -2,26 +2,32 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { HarnessExtensionAPI } from "@harness-kit/agent";
+import type { HarnessExtensionAPI, ToolDefinition } from "@harness-kit/agent";
 import { FACT_VERIFICATION_KEY } from "@harness-kit/agent";
 import type { FactVerificationMetadata } from "@harness-kit/agent";
 
 function createMockPI(): HarnessExtensionAPI & {
   handlers: Record<string, (...args: unknown[]) => unknown>;
   sentMessages: string[];
+  tools: Record<string, ToolDefinition>;
 } {
   const handlers: Record<string, (...args: unknown[]) => unknown> = {};
   const sentMessages: string[] = [];
+  const tools: Record<string, ToolDefinition> = {};
 
   const on = (event: string, handler: (...args: unknown[]) => unknown) => {
     handlers[event] = handler;
   };
+  const registerTool = vi.fn((tool: ToolDefinition) => {
+    tools[tool.name] = tool;
+  });
 
   return {
     handlers,
     sentMessages,
+    tools,
     on: on as HarnessExtensionAPI["on"],
-    registerTool: vi.fn(),
+    registerTool,
     sendUserMessage(content: string) {
       sentMessages.push(content);
     },
@@ -267,6 +273,43 @@ describe("core turn_end handler — metadata path", () => {
     const state = JSON.parse(readFileSync(statePath, "utf-8"));
     expect(state.currentPhase).toBe(1);
     expect(state.phases[0].status).toBe("completed");
+  });
+
+  it("does not advance again from turn_end after complete_phase succeeds in the same turn", async () => {
+    const pi = createMockPI();
+    harnessKitExtension(pi);
+    pi.handlers["session_start"]?.({}, { cwd: tmpDir });
+
+    writeFileSync(join(tmpDir, "auth.ts"), "const auth = () => {}\n");
+    const block = {
+      currentWork: "completed design",
+      facts: [{ file: "auth.ts", startLine: 1, endLine: 1, exactText: "const auth = () => {}" }],
+    };
+
+    const completeResult = await pi.tools["complete_phase"].execute(
+      "tc-complete",
+      { phaseName: "design", result: block },
+      undefined,
+      undefined,
+      { cwd: tmpDir, shutdown: () => {} },
+    );
+    expect(completeResult.isError).toBeUndefined();
+
+    const agentMeta: FactVerificationMetadata = {
+      status: "pass",
+      block,
+      report: null,
+      timestamp: Date.now(),
+    };
+    pi.handlers["turn_end"]?.(
+      makeTurnEndEvent({ metadata: { [FACT_VERIFICATION_KEY]: agentMeta } }),
+    );
+
+    const statePath = join(tmpDir, ".harness-kit", "state.json");
+    const state = JSON.parse(readFileSync(statePath, "utf-8"));
+    expect(state.currentPhase).toBe(1);
+    expect(state.phases[0].status).toBe("completed");
+    expect(state.phases[1].status).toBe("pending");
   });
 
   it("fail metadata does not advance phase", () => {

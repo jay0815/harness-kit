@@ -22,6 +22,7 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
   let workspaceDir = process.cwd();
   let harnessState: HarnessState | null = null;
   let phaseSnapshot: ReturnType<typeof snapshotWorkspace> | null = null;
+  let phaseCompletedByToolThisTurn = false;
 
   pi.on("session_start", (_event, ctx) => {
     workspaceDir = ctx.cwd;
@@ -46,6 +47,10 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
     closeTelemetry();
   });
 
+  pi.on("turn_start", () => {
+    phaseCompletedByToolThisTurn = false;
+  });
+
   pi.registerTool(
     createCompletePhaseTool({
       workflow,
@@ -54,6 +59,9 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
       getPhaseSnapshot: () => phaseSnapshot,
       setPhaseSnapshot: (snapshot) => {
         phaseSnapshot = snapshot;
+      },
+      onPhaseCompleted: () => {
+        phaseCompletedByToolThisTurn = true;
       },
     }),
   );
@@ -162,6 +170,15 @@ export default function harnessKitExtension(pi: HarnessExtensionAPI) {
 
     if (block?.warnings && block.warnings.length > 0) {
       emit("hk_result", "warnings", { warnings: block.warnings });
+    }
+
+    if (phaseCompletedByToolThisTurn) {
+      emit("turn", "fallback_skipped", {
+        turnIndex: event.turnIndex,
+        reason: "phase_completed_by_complete_phase",
+        currentPhase: harnessState?.currentPhase,
+      });
+      return;
     }
 
     // 2. Metadata path — trust agent layer verification

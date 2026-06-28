@@ -42,6 +42,7 @@ export interface CompletePhaseToolOptions {
   snapshotWorkspace?: typeof defaultSnapshotWorkspace;
   detectOutOfScope?: typeof defaultDetectOutOfScope;
   emit?: typeof defaultEmit;
+  onPhaseCompleted?: () => void;
 }
 
 export function createCompletePhaseTool(
@@ -133,6 +134,7 @@ export function createCompletePhaseTool(
         }
 
         options.setPhaseSnapshot(afterSnapshot);
+        options.onPhaseCompleted?.();
         emit("state", "phase_completed", {
           phase: state.currentPhase - 1,
           name: scheduled.completedPhase?.name,
