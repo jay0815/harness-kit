@@ -64,31 +64,54 @@ async function executePhase(
     llmExecutor?: LlmExecutor;
   },
 ): Promise<PhaseResult> {
-  if (phase.executor === "code") {
-    const options: ExecuteCodeOptions = {
-      phase,
-      workflowDir: context.workflowDir,
-      env: context.env,
-      timeoutMs: context.timeoutMs,
-    };
-    return executeCode(options);
-  }
+  const executor = getExecutor(phase);
 
-  if (phase.executor === "subagent") {
-    return {
-      phaseName: phase.name,
-      executor: "subagent",
-      success: false,
-      output: 'Error: executor "subagent" is only supported by WorkflowRunner',
-      durationMs: 0,
-    };
+  switch (executor) {
+    case "code": {
+      const options: ExecuteCodeOptions = {
+        phase,
+        workflowDir: context.workflowDir,
+        env: context.env,
+        timeoutMs: context.timeoutMs,
+      };
+      return executeCode(options);
+    }
+    case "subagent":
+      return {
+        phaseName: phase.name,
+        executor,
+        success: false,
+        output: 'Error: executor "subagent" is only supported by WorkflowRunner',
+        durationMs: 0,
+      };
+    case "llm":
+    case "self":
+      return executeLlmPhase(phase, context);
+    default:
+      return {
+        phaseName: phase.name,
+        executor,
+        success: false,
+        output: `Error: unknown executor "${executor}"`,
+        durationMs: 0,
+      };
   }
+}
 
-  // LLM executor
+async function executeLlmPhase(
+  phase: PhaseConfig,
+  context: {
+    outputs: Map<string, string>;
+    timeoutMs?: number;
+    llmExecutor?: LlmExecutor;
+  },
+): Promise<PhaseResult> {
+  const executor = getExecutor(phase);
+
   if (!context.llmExecutor) {
     return {
       phaseName: phase.name,
-      executor: phase.executor,
+      executor,
       success: false,
       output: "Error: no LLM executor provided",
       durationMs: 0,
@@ -116,7 +139,7 @@ async function executePhase(
 
     return {
       phaseName: phase.name,
-      executor: phase.executor,
+      executor,
       success: result.success,
       output: result.output,
       durationMs: Date.now() - startTime,
@@ -125,7 +148,7 @@ async function executePhase(
     const isAbort = err instanceof Error && err.name === "AbortError";
     return {
       phaseName: phase.name,
-      executor: phase.executor,
+      executor,
       success: false,
       output: isAbort
         ? `Error: LLM phase "${phase.name}" timed out after ${timeoutMs}ms`
@@ -138,37 +161,52 @@ async function executePhase(
 }
 
 function executePhaseDryRun(phase: PhaseConfig, outputs: Map<string, string>): PhaseResult {
-  // In dry-run mode, we simulate execution
-  if (phase.executor === "llm" || phase.executor === "self") {
-    const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
+  const executor = getExecutor(phase);
 
-    return {
-      phaseName: phase.name,
-      executor: phase.executor,
-      success: true,
-      output: `[DRY RUN] Would execute LLM with prompt:\n${prompt}`,
-      durationMs: 0,
-    };
+  switch (executor) {
+    case "llm":
+    case "self": {
+      const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
+
+      return {
+        phaseName: phase.name,
+        executor,
+        success: true,
+        output: `[DRY RUN] Would execute LLM with prompt:\n${prompt}`,
+        durationMs: 0,
+      };
+    }
+    case "subagent": {
+      const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
+      return {
+        phaseName: phase.name,
+        executor,
+        success: true,
+        output: `[DRY RUN] Would execute subagent ${phase.subagentType ?? "claude"} with prompt:\n${prompt}`,
+        durationMs: 0,
+      };
+    }
+    case "code": {
+      const command = phase.command ?? phase.script ?? "(unknown)";
+      return {
+        phaseName: phase.name,
+        executor,
+        success: true,
+        output: `[DRY RUN] Would execute: ${command}`,
+        durationMs: 0,
+      };
+    }
+    default:
+      return {
+        phaseName: phase.name,
+        executor,
+        success: false,
+        output: `Error: unknown executor "${executor}"`,
+        durationMs: 0,
+      };
   }
+}
 
-  if (phase.executor === "subagent") {
-    const prompt = phase.prompt ? substituteTemplate(phase.prompt, outputs) : "(no prompt)";
-    return {
-      phaseName: phase.name,
-      executor: "subagent",
-      success: true,
-      output: `[DRY RUN] Would execute subagent ${phase.subagentType ?? "claude"} with prompt:\n${prompt}`,
-      durationMs: 0,
-    };
-  }
-
-  // Code executor
-  const command = phase.command ?? phase.script ?? "(unknown)";
-  return {
-    phaseName: phase.name,
-    executor: "code",
-    success: true,
-    output: `[DRY RUN] Would execute: ${command}`,
-    durationMs: 0,
-  };
+function getExecutor(phase: PhaseConfig): string {
+  return String((phase as { executor?: unknown }).executor ?? "");
 }

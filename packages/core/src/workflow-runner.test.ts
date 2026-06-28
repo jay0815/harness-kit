@@ -1,6 +1,20 @@
-import { describe, it, expect, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WorkflowRunner } from "./workflow-runner.js";
 import type { Workflow } from "./types.js";
+
+const agentMocks = vi.hoisted(() => ({
+  sessionPrompt: vi.fn(),
+  subagentGenerateId: vi.fn(),
+  subagentGetResultPath: vi.fn(),
+  subagentBuildCommand: vi.fn(),
+  subagentCollectResult: vi.fn(),
+  subagentClearActive: vi.fn(),
+}));
+
+const childProcessMocks = vi.hoisted(() => ({
+  spawn: vi.fn(),
+}));
 
 vi.mock("@harness-kit/agent", () => {
   class MockSession {
@@ -10,20 +24,15 @@ vi.mock("@harness-kit/agent", () => {
       sendUserMessage: vi.fn(),
     };
     start = vi.fn().mockResolvedValue(undefined);
-    prompt = vi.fn().mockResolvedValue(undefined);
+    prompt = agentMocks.sessionPrompt;
     shutdown = vi.fn().mockResolvedValue(undefined);
   }
   class MockSubagentRunner {
-    generateId = vi.fn().mockReturnValue("test-id-1");
-    getResultPath = vi.fn().mockReturnValue("/tmp/hk-result-test-id-1.json");
-    buildCommand = vi.fn().mockReturnValue({ command: "echo", args: ["test"] });
-    collectResult = vi.fn().mockReturnValue({
-      success: false,
-      subagentId: "test-id-1",
-      error: "No result file found",
-      errorType: "no_result",
-      durationMs: 0,
-    });
+    generateId = agentMocks.subagentGenerateId;
+    getResultPath = agentMocks.subagentGetResultPath;
+    buildCommand = agentMocks.subagentBuildCommand;
+    collectResult = agentMocks.subagentCollectResult;
+    clearActive = agentMocks.subagentClearActive;
   }
   return {
     DEFAULT_TIMEOUT_MS: 300_000,
@@ -46,6 +55,10 @@ vi.mock("./code-executor.js", () => ({
   }),
 }));
 
+vi.mock("node:child_process", () => ({
+  spawn: childProcessMocks.spawn,
+}));
+
 function makeConfig(workflow?: Workflow) {
   return {
     cwd: "/tmp/test",
@@ -55,7 +68,41 @@ function makeConfig(workflow?: Workflow) {
   };
 }
 
+function makeMockProcess() {
+  const proc = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: ReturnType<typeof vi.fn>;
+  };
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
+  proc.kill = vi.fn();
+  return proc;
+}
+
 describe("WorkflowRunner", () => {
+  beforeEach(() => {
+    agentMocks.sessionPrompt.mockReset().mockResolvedValue(undefined);
+    agentMocks.subagentGenerateId.mockReset().mockReturnValue("test-id-1");
+    agentMocks.subagentGetResultPath
+      .mockReset()
+      .mockReturnValue("/tmp/hk-result-test-id-1.json");
+    agentMocks.subagentBuildCommand.mockReset().mockReturnValue({ command: "echo", args: ["test"] });
+    agentMocks.subagentCollectResult.mockReset().mockReturnValue({
+      success: false,
+      subagentId: "test-id-1",
+      error: "No result file found",
+      errorType: "no_result",
+      durationMs: 0,
+    });
+    agentMocks.subagentClearActive.mockReset();
+    childProcessMocks.spawn.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses default workflow when no workflow or path provided", () => {
     const runner = new WorkflowRunner(makeConfig());
     const wf = runner.getWorkflow();
@@ -165,6 +212,20 @@ describe("WorkflowRunner", () => {
     expect(result.success).toBe(true);
   });
 
+  it("executePhase with llm executor returns failure when prompt throws", async () => {
+    agentMocks.sessionPrompt.mockRejectedValueOnce(new Error("network error"));
+    const runner = new WorkflowRunner(makeConfig());
+    const result = await runner.executePhase({
+      name: "design",
+      executor: "llm",
+      prompt: "design the feature",
+      contextFiles: [],
+      humanConfirm: false,
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("network error");
+  });
+
   it("executePhase rejects unknown executor", async () => {
     const runner = new WorkflowRunner(makeConfig());
     const result = await runner.executePhase({
@@ -179,10 +240,10 @@ describe("WorkflowRunner", () => {
   });
 
   it("executePhase with subagent executor spawns process", async () => {
+    const proc = makeMockProcess();
+    childProcessMocks.spawn.mockReturnValue(proc);
     const runner = new WorkflowRunner(makeConfig());
-    // subagent executor spawns a real process, which will fail quickly
-    // because "echo" is not a valid subagent. We just verify it doesn't crash.
-    const result = await runner.executePhase({
+    const promise = runner.executePhase({
       name: "test-subagent",
       executor: "subagent",
       prompt: "test task",
@@ -191,9 +252,12 @@ describe("WorkflowRunner", () => {
       subagentType: "script",
       subagentTimeoutMs: 5000,
     });
-    // The process will fail (echo doesn't write a result file), but it should not throw
-    expect(result).toHaveProperty("success");
-    expect(result).toHaveProperty("output");
+    await vi.waitFor(() => expect(childProcessMocks.spawn).toHaveBeenCalled());
+    proc.emit("close", 0);
+
+    const result = await promise;
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("No result file found");
   });
 
   it("executePhase rejects unknown subagent executor", async () => {
@@ -208,6 +272,51 @@ describe("WorkflowRunner", () => {
     });
     expect(result.success).toBe(false);
     expect(result.output).toContain("Unknown subagent executor");
+  });
+
+  it("executePhase rejects invalid subagent timeout", async () => {
+    const runner = new WorkflowRunner(makeConfig());
+    const result = await runner.executePhase({
+      name: "test-subagent",
+      executor: "subagent",
+      prompt: "test task",
+      contextFiles: [],
+      humanConfirm: false,
+      subagentType: "script",
+      subagentTimeoutMs: 0,
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Invalid subagent timeout");
+    expect(childProcessMocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not collect and delete results after subagent timeout", async () => {
+    vi.useFakeTimers();
+    const proc = makeMockProcess();
+    childProcessMocks.spawn.mockReturnValue(proc);
+    const runner = new WorkflowRunner(makeConfig());
+
+    const promise = runner.executePhase({
+      name: "test-subagent",
+      executor: "subagent",
+      prompt: "test task",
+      contextFiles: [],
+      humanConfirm: false,
+      subagentType: "script",
+      subagentTimeoutMs: 10,
+    });
+
+    await vi.waitFor(() => expect(childProcessMocks.spawn).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await promise;
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Result file preserved");
+    expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(agentMocks.subagentClearActive).toHaveBeenCalledWith("test-id-1");
+
+    proc.emit("close", 0);
+    expect(agentMocks.subagentCollectResult).not.toHaveBeenCalled();
   });
 
   it("getWorkflow preserves subagent fields from provided workflow", () => {

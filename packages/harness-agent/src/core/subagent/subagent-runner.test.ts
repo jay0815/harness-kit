@@ -218,28 +218,41 @@ describe("SubagentRunner", () => {
 
   it("collectResult returns error for missing file", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
-    const collected = runner.collectResult("nonexistent");
+    const id = runner.generateId();
+    const collected = runner.collectResult(id);
     expect(collected.success).toBe(false);
     expect(collected.errorType).toBe("no_result");
+    expect(runner.getActive()).not.toContain(id);
   });
 
   it("collectResult returns error for invalid JSON", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
-    const id = "bad-json";
+    const id = runner.generateId();
     writeFileSync(runner.getResultPath(id), "not json", "utf-8");
 
     const collected = runner.collectResult(id);
     expect(collected.success).toBe(false);
     expect(collected.errorType).toBe("invalid_json");
+    expect(runner.getActive()).not.toContain(id);
   });
 
   it("collectResult returns error for invalid schema", () => {
     const runner = new SubagentRunner({ resultDir: tmpDir });
-    const id = "bad-schema";
+    const id = runner.generateId();
     writeFileSync(runner.getResultPath(id), JSON.stringify({ foo: "bar" }), "utf-8");
 
     const collected = runner.collectResult(id);
     expect(collected.success).toBe(false);
     expect(collected.errorType).toBe("invalid_schema");
+    expect(runner.getActive()).not.toContain(id);
+  });
+
+  it("clearActive removes active subagent without collecting result", () => {
+    const runner = new SubagentRunner({ resultDir: tmpDir });
+    const id = runner.generateId();
+
+    runner.clearActive(id);
+
+    expect(runner.getActive()).not.toContain(id);
   });
 });

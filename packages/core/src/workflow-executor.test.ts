@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { executeWorkflow, type LlmExecutor } from "./workflow-executor.js";
 import { loadWorkflow } from "./workflow-loader.js";
+import type { WorkflowConfig } from "./workflow-schema.js";
 
 let ws: string;
 
@@ -228,6 +229,46 @@ phases:
     expect(run.overallSuccess).toBe(false);
     expect(run.phases[0].success).toBe(false);
     expect(run.phases[0].output).toContain("only supported by WorkflowRunner");
+  });
+
+  it("does not execute unknown executor as LLM", async () => {
+    let llmCalled = false;
+    const config = {
+      workflow: "test",
+      phases: [{ name: "bad", executor: "lml", prompt: "Do something" }],
+    } as unknown as WorkflowConfig;
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      llmExecutor: {
+        execute: async () => {
+          llmCalled = true;
+          return { success: true, output: "should not run" };
+        },
+      },
+    });
+
+    expect(run.overallSuccess).toBe(false);
+    expect(run.phases[0].output).toContain('unknown executor "lml"');
+    expect(llmCalled).toBe(false);
+  });
+
+  it("does not dry-run unknown executor as code", async () => {
+    const config = {
+      workflow: "test",
+      phases: [{ name: "bad", executor: "lml", command: "echo wrong" }],
+    } as unknown as WorkflowConfig;
+
+    const run = await executeWorkflow({
+      config,
+      workflowDir: ws,
+      dryRun: true,
+    });
+
+    expect(run.overallSuccess).toBe(false);
+    expect(run.phases[0].output).toContain('unknown executor "lml"');
+    expect(run.phases[0].output).not.toContain("echo wrong");
   });
 
   it("reports error when LLM executor missing", async () => {

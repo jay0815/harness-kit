@@ -62,7 +62,20 @@ describe("pane functions", () => {
 
     expect(execFileSync).toHaveBeenCalledWith(
       "tmux-bridge",
-      ["type", "%42", "hello[31m\nworld"],
+      ["type", "%42", "hello\nworld"],
+      expect.any(Object),
+    );
+  });
+
+  it("typeToPane strips OSC ANSI sequences", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { typeToPane } = await import("./pane.js");
+
+    typeToPane("%42", "hello\x1b]0;title\x07world");
+
+    expect(execFileSync).toHaveBeenCalledWith(
+      "tmux-bridge",
+      ["type", "%42", "helloworld"],
       expect.any(Object),
     );
   });

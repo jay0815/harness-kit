@@ -140,6 +140,7 @@ export class WorkflowRunner {
 
   private async executeSubagentPhase(phase: Phase): Promise<{ success: boolean; output: string }> {
     const executor = phase.subagentType ?? "claude";
+    const timeoutMs = phase.subagentTimeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     if (!isSubagentExecutor(executor)) {
       return {
@@ -148,7 +149,15 @@ export class WorkflowRunner {
       };
     }
 
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
+      return {
+        success: false,
+        output: `Invalid subagent timeout: ${phase.subagentTimeoutMs}`,
+      };
+    }
+
     const subagentId = this.subagentRunner.generateId();
+    const resultPath = this.subagentRunner.getResultPath(subagentId);
 
     const { command, args } = this.subagentRunner.buildCommand({
       id: subagentId,
@@ -167,13 +176,25 @@ export class WorkflowRunner {
         stdio: ["ignore", "pipe", "pipe"],
       });
 
-      const timeout = setTimeout(() => {
+      let settled = false;
+      let timedOut = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const finish = (result: { success: boolean; output: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      };
+
+      timeout = setTimeout(() => {
+        timedOut = true;
         proc.kill("SIGTERM");
-        resolve({
+        clearSubagentActive(this.subagentRunner, subagentId);
+        finish({
           success: false,
-          output: `Subagent timed out after ${phase.subagentTimeoutMs ?? DEFAULT_TIMEOUT_MS}ms`,
+          output: `Subagent timed out after ${timeoutMs}ms. Result file preserved at ${resultPath}`,
         });
-      }, phase.subagentTimeoutMs ?? DEFAULT_TIMEOUT_MS);
+      }, timeoutMs);
 
       let stdout = "";
       let stderr = "";
@@ -186,16 +207,16 @@ export class WorkflowRunner {
       });
 
       proc.on("close", (code) => {
-        clearTimeout(timeout);
+        if (timedOut) return;
 
         const result = this.subagentRunner.collectResult(subagentId);
         if (result.success) {
-          resolve({
+          finish({
             success: true,
             output: result.block?.currentWork ?? stdout,
           });
         } else {
-          resolve({
+          finish({
             success: false,
             output: result.error ?? stderr ?? `Process exited with code ${code}`,
           });
@@ -203,8 +224,8 @@ export class WorkflowRunner {
       });
 
       proc.on("error", (err) => {
-        clearTimeout(timeout);
-        resolve({
+        clearSubagentActive(this.subagentRunner, subagentId);
+        finish({
           success: false,
           output: `Failed to start subagent: ${err.message}`,
         });
@@ -213,11 +234,22 @@ export class WorkflowRunner {
   }
 
   private async executeLlmPhase(phase: Phase): Promise<{ success: boolean; output: string }> {
-    await this.session.prompt(phase.prompt);
-    return { success: true, output: "" };
+    try {
+      await this.session.prompt(phase.prompt);
+      return { success: true, output: "" };
+    } catch (err) {
+      return {
+        success: false,
+        output: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 }
 
 function isSubagentExecutor(value: string): value is SubagentExecutor {
   return value === "claude" || value === "codex" || value === "harness-agent" || value === "script";
+}
+
+function clearSubagentActive(runner: SubagentRunner, subagentId: string): void {
+  (runner as SubagentRunner & { clearActive?: (id: string) => void }).clearActive?.(subagentId);
 }

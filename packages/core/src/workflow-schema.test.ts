@@ -107,6 +107,16 @@ describe("PhaseConfig schema", () => {
     expect(Value.Check(PhaseConfig, phase)).toBe(false);
   });
 
+  it("rejects zero subagent timeout", () => {
+    const phase = {
+      name: "review",
+      executor: "subagent",
+      prompt: "Review the changes",
+      subagentTimeoutMs: 0,
+    };
+    expect(Value.Check(PhaseConfig, phase)).toBe(false);
+  });
+
   it("rejects invalid executor type", () => {
     const phase = {
       name: "test",

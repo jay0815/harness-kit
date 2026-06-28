@@ -68,6 +68,15 @@ describe("snapshotWorkspace", () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it("tracks large files with metadata instead of omitting them", () => {
+    writeFileSync(join(ws, "large.bin"), Buffer.alloc(10 * 1024 * 1024 + 1, 1));
+
+    const snap = snapshotWorkspace(ws);
+    const entry = snap.get("large.bin");
+    expect(entry).toBeDefined();
+    expect(entry!.sha256).toMatch(/^large:/);
+  });
 });
 
 describe("detectOutOfScope", () => {
@@ -133,5 +142,26 @@ describe("detectOutOfScope", () => {
 
     const result = detectOutOfScope(before, after, []);
     expect(result).toContain("src/temp.ts");
+  });
+
+  it("detects large undeclared file additions", () => {
+    const before = snapshotWorkspace(ws);
+
+    writeFileSync(join(ws, "large.bin"), Buffer.alloc(10 * 1024 * 1024 + 1, 1));
+    const after = snapshotWorkspace(ws);
+
+    const result = detectOutOfScope(before, after, []);
+    expect(result).toContain("large.bin");
+  });
+
+  it("detects large undeclared file metadata changes", () => {
+    writeFileSync(join(ws, "large.bin"), Buffer.alloc(10 * 1024 * 1024 + 1, 1));
+    const before = snapshotWorkspace(ws);
+
+    writeFileSync(join(ws, "large.bin"), Buffer.alloc(10 * 1024 * 1024 + 2, 1));
+    const after = snapshotWorkspace(ws);
+
+    const result = detectOutOfScope(before, after, []);
+    expect(result).toContain("large.bin");
   });
 });

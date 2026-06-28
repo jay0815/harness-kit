@@ -74,8 +74,9 @@ export function typeToPane(paneId: string, text: string): void {
 }
 
 function sanitizePaneText(text: string): string {
+  const textWithoutAnsi = stripAnsiSequences(text);
   let sanitized = "";
-  for (const char of text) {
+  for (const char of textWithoutAnsi) {
     const code = char.charCodeAt(0);
     const allowedControl = code === 0x09 || code === 0x0a || code === 0x0d;
     const printable = code >= 0x20 && code !== 0x7f && (code < 0x80 || code > 0x9f);
@@ -84,6 +85,47 @@ function sanitizePaneText(text: string): string {
     }
   }
   return sanitized;
+}
+
+function stripAnsiSequences(text: string): string {
+  let stripped = "";
+
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code !== 0x1b) {
+      stripped += text[i];
+      continue;
+    }
+
+    const next = text.charCodeAt(i + 1);
+    if (next === 0x5b) {
+      i += 2;
+      while (i < text.length) {
+        const current = text.charCodeAt(i);
+        if (current >= 0x40 && current <= 0x7e) break;
+        i++;
+      }
+      continue;
+    }
+
+    if (next === 0x5d) {
+      i += 2;
+      while (i < text.length) {
+        const current = text.charCodeAt(i);
+        if (current === 0x07) break;
+        if (current === 0x1b && text.charCodeAt(i + 1) === 0x5c) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+
+    i++;
+  }
+
+  return stripped;
 }
 
 /**

@@ -186,6 +186,21 @@ phases:
 
     expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
   });
+
+  it("throws on zero subagent timeout", () => {
+    const yaml = `
+workflow: test
+phases:
+  - name: test
+    executor: subagent
+    prompt: Review
+    subagentTimeoutMs: 0
+`;
+    const filePath = join(ws, "workflow.yaml");
+    writeFileSync(filePath, yaml);
+
+    expect(() => loadWorkflow(filePath)).toThrow(WorkflowLoadError);
+  });
 });
 
 describe("substituteTemplate", () => {

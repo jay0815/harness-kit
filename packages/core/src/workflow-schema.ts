@@ -42,7 +42,7 @@ export const PhaseConfig = Type.Object({
   // Subagent executor fields
   subagentType: Type.Optional(SubagentExecutorType),
   subagentConstraints: Type.Optional(Type.Array(Type.String())),
-  subagentTimeoutMs: Type.Optional(Type.Number()),
+  subagentTimeoutMs: Type.Optional(Type.Number({ minimum: 1 })),
   subagentSettings: Type.Optional(Type.String()),
 });
 export type PhaseConfig = Static<typeof PhaseConfig>;
@@ -59,7 +59,7 @@ export type WorkflowConfig = Static<typeof WorkflowConfig>;
 
 export interface PhaseResult {
   phaseName: string;
-  executor: ExecutorType;
+  executor: string;
   success: boolean;
   output: string;
   durationMs: number;

@@ -41,6 +41,7 @@ export class SubagentRunner {
     const startTime = Date.now();
 
     if (!existsSync(path)) {
+      this.activeTasks.delete(subagentId);
       return {
         success: false,
         subagentId,
@@ -52,6 +53,7 @@ export class SubagentRunner {
 
     const parsed = parseResultFile(path);
     if (!parsed) {
+      this.activeTasks.delete(subagentId);
       return {
         success: false,
         subagentId,
@@ -62,6 +64,7 @@ export class SubagentRunner {
     }
 
     if (!validateResultFile(parsed)) {
+      this.activeTasks.delete(subagentId);
       return {
         success: false,
         subagentId,
@@ -87,6 +90,10 @@ export class SubagentRunner {
       block,
       durationMs: Date.now() - startTime,
     };
+  }
+
+  clearActive(subagentId: string): void {
+    this.activeTasks.delete(subagentId);
   }
 
   buildCommand(task: SubagentTask): { command: string; args: string[] } {

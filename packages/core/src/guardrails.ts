@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { SnapshotEntry } from "./types.js";
 
 const SKIP_DIRS = new Set([".git", ".harness-kit", "node_modules"]);
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB - skip files larger than this
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB - avoid hashing larger files
 
 export type WorkspaceSnapshot = Map<string, SnapshotEntry>;
 
@@ -34,15 +34,18 @@ function walkDir(root: string, dir: string, snapshot: WorkspaceSnapshot): void {
       const relPath = normalizeSnapshotPath(relative(root, fullPath));
       try {
         const st = statSync(fullPath);
-        // Skip files larger than MAX_FILE_SIZE to avoid blocking the event loop
-        if (st.size > MAX_FILE_SIZE) continue;
+        // Use mtimeNs if available (Node 22+), otherwise convert from mtimeMs with better precision
+        const mtimeNs = getMtimeNs(st);
+        if (st.size > MAX_FILE_SIZE) {
+          snapshot.set(relPath, {
+            size: st.size,
+            mtimeNs,
+            sha256: `large:${st.size}:${mtimeNs.toString()}`,
+          });
+          continue;
+        }
         const content = readFileSync(fullPath);
         const sha256 = createHash("sha256").update(content).digest("hex");
-        // Use mtimeNs if available (Node 22+), otherwise convert from mtimeMs with better precision
-        const mtimeNs =
-          "mtimeNs" in st
-            ? (st as { mtimeNs: bigint }).mtimeNs
-            : BigInt(Math.round(st.mtimeMs * 1_000_000));
         snapshot.set(relPath, { size: st.size, mtimeNs, sha256 });
       } catch {
         // skip unreadable files
@@ -80,4 +83,8 @@ export function detectOutOfScope(
 
 function normalizeSnapshotPath(filePath: string): string {
   return normalize(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function getMtimeNs(st: { mtimeMs: number; mtimeNs?: bigint }): bigint {
+  return st.mtimeNs ?? BigInt(Math.round(st.mtimeMs * 1_000_000));
 }
