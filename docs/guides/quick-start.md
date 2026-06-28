@@ -57,9 +57,9 @@ pnpm run harness
 
 ### PI Extension（可选）
 
-在 PI 框架内运行，接入 PI 的 ExtensionAPI。当前路径会注入 current-phase scheduler prompt、注册 `complete_phase`、记录 telemetry，并通过 `sendUserMessage` 反馈 legacy 校验失败；目标路径是由 harness-kit 的 phase scheduler/state machine 管理 phase 边界。需要 PI 环境。
+在 PI 框架内运行，接入 PI 的 ExtensionAPI。当前路径会注入 current-phase scheduler prompt、注册 `complete_phase` / `confirm_phase`、记录 telemetry，并通过 `sendUserMessage` 反馈 legacy 校验失败；phase 边界由 harness-kit 的 scheduler/state machine 管理。需要 PI 环境。
 
-目标形态见 [Phase Scheduler 计划](../phase-scheduler-plan.md)。
+设计和迭代记录见 [Phase Scheduler 计划](../phase-scheduler-plan.md)。
 
 ## 项目结构
 

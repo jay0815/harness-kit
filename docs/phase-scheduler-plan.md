@@ -122,7 +122,7 @@ idle
 目标：把 `humanConfirm` 从提示词变成 scheduler 状态。
 
 范围：
-- phase 完成后如果下一 phase 需要确认，scheduler 进入 `awaiting_human`。
+- 带 `humanConfirm` 的 phase 完成后，scheduler 进入 `awaiting_human`。
 - 用户确认后再 dispatch 下一 phase。
 - 用户拒绝或修改指令时保持状态可恢复。
 

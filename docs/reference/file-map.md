@@ -109,8 +109,8 @@
 |------|------|
 | `src/index.ts` | Extension entry — 注册工具、注入 current-phase scheduler prompt、turn_end fallback + telemetry |
 | `src/index.test.ts` | Extension 测试 |
-| `src/phase-tool.ts` | `complete_phase` 工具，执行 fact verification、guardrail 和 scheduler 推进 |
-| `src/phase-tool.test.ts` | `complete_phase` 工具测试 |
+| `src/phase-tool.ts` | `complete_phase` / `confirm_phase` 工具，执行 fact verification、guardrail、scheduler 推进和 human gate 确认 |
+| `src/phase-tool.test.ts` | phase 工具测试 |
 | `src/tools.ts` | Legacy PI tools（start_agent, acp_send, acp_read, hard_verify） |
 | `src/tools.test.ts` | 工具测试（16 个用例） |
 | `src/pane.ts` | tmux/bridge subprocess 调用 |
