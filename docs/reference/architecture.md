@@ -37,12 +37,16 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 | 模式 | 入口 | 说明 |
 |------|------|------|
 | **Standalone CLI** | `harness-agent` CLI | 独立运行，不依赖 PI，middleware 全量生效 |
-| **PI Extension** | `@harness-kit/core` | 在 PI 框架内运行，注入 workflow prompt、telemetry、sendUserMessage |
+| **PI Extension** | `@harness-kit/core` | 在 PI 框架内运行，目标是 scheduler-driven phase control；保留 telemetry、sendUserMessage 和 legacy fallback |
 | **WorkflowRunner** | `packages/core/src/workflow-runner.ts` | 编程式入口，支持 self/code/subagent executor |
 
-三种模式共享 `<HK_RESULT>` 作为唯一的 agent 输出边界。
+三种模式共享 `<HK_RESULT>` / ResultBlock 作为 agent 和 harness 之间的数据边界。
 
 ## PI Extension 集成
+
+PI Extension 不替换 PI agent loop。PI 继续负责模型调用、消息历史、tool calling 和 UI；harness-kit 作为控制面负责 phase 边界、校验、状态推进、人工确认和持久化。
+
+当前实现仍保留 prompt-driven workflow 和 `turn_end` 自动校验。目标形态是 tool-gated scheduler：模型完成当前 phase 后调用 `complete_phase`，由 harness-kit 决定是否推进。
 
 ### 架构图
 
@@ -55,14 +59,17 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 │  │  │         harness-kit Extension                │    │    │
 │  │  │  ┌───────────────────────────────────────┐  │    │    │
 │  │  │  │  session_start → init telemetry/state  │  │    │    │
-│  │  │  │  before_agent_start → inject workflow  │  │    │    │
-│  │  │  │  turn_end → auto-verify <HK_RESULT>   │  │    │    │
+│  │  │  │  before_agent_start → inject current   │  │    │    │
+│  │  │  │  phase instruction                     │  │    │    │
+│  │  │  │  complete_phase → verify + advance     │  │    │    │
+│  │  │  │  turn_end → telemetry + fallback       │  │    │    │
 │  │  │  │  session_shutdown → close telemetry    │  │    │    │
 │  │  │  └───────────────────────────────────────┘  │    │    │
 │  │  │  ┌───────────────────────────────────────┐  │    │    │
 │  │  │  │  Registered Tools                      │  │    │    │
-│  │  │  │  • hard_verify    • start_agent        │  │    │    │
-│  │  │  │  • acp_send       • acp_read           │  │    │    │
+│  │  │  │  • complete_phase • hard_verify        │  │    │    │
+│  │  │  │  • start_agent    • acp_send           │  │    │    │
+│  │  │  │  • acp_read                            │  │    │    │
 │  │  │  └───────────────────────────────────────┘  │    │    │
 │  │  └─────────────────────────────────────────────┘    │    │
 │  └─────────────────────────────────────────────────────┘    │
@@ -78,13 +85,39 @@ harness-kit 拥有自己的 agent runtime，直接调用 LLM + middleware pipeli
 ### 数据流
 
 ```
-User → PI TUI → [system prompt injection] → LLM
-       PI TUI ← [LLM outputs <HK_RESULT>]
-       PI TUI → [turn_end auto-verify] → verifyFacts()
-       PI TUI → [FAIL?] → pi.sendUserMessage(error) → LLM self-corrects
-       PI TUI → [PASS?] → continue to next phase
-       PI TUI → report to user
+User → PI TUI → [current phase instruction] → LLM
+       PI TUI ← [LLM calls complete_phase(result)]
+       harness scheduler → verifyFacts() + guardrails
+       FAIL → tool result / sendUserMessage feedback → same phase
+       PASS → save artifact/state → next phase / human gate / complete
+       turn_end → telemetry + legacy fallback only
 ```
+
+### Phase Scheduler
+
+目标 scheduler 是一个小型状态机，不接管 PI 的每次思考和工具选择：
+
+```
+idle
+  -> running_phase
+  -> verifying_phase
+  -> awaiting_human
+  -> phase_completed
+  -> workflow_completed
+
+任意状态
+  -> phase_failed_retryable
+  -> failed
+  -> aborted
+```
+
+核心规则：
+
+- PI agent 可以执行当前 phase，但不能自行推进 phase。
+- phase 完成必须通过 `complete_phase` 提交结构化 ResultBlock。
+- scheduler 校验 phase 名称、facts、guardrails，再原子保存 artifact/state。
+- 校验失败停留在当前 phase，并把失败详情反馈给模型。
+- `turn_end` 保留为 telemetry 和 legacy fallback，避免旧用法立即失效。
 
 ### 启动命令
 
@@ -185,11 +218,12 @@ Subagent 完成任务后写入 `{os.tmpdir()}/hk-result-{id}.json`：
 
 ### `<HK_RESULT>` 边界
 
-`<HK_RESULT>` 是 harness-kit 与编码代理之间的**唯一边界**。不解析 ANSI，不使用输出启发式。如果 agent 不产生此块，状态永远是 PENDING。
+`<HK_RESULT>` 是 harness-kit 与编码代理之间的数据边界。目标 scheduler path 中，ResultBlock 通过 `complete_phase` 工具提交；legacy path 仍可在 `turn_end` 中从自然语言输出提取 `<HK_RESULT>`。
 
 边界在两个层级强制执行：
-1. **Prompt 层** — system prompt 指示 LLM 输出 `<HK_RESULT>`
-2. **Harness 层** — turn_end handler 自动校验事实
+1. **Tool 层** — `complete_phase` 是 phase 推进的唯一推荐入口
+2. **Harness 层** — scheduler 校验事实、guardrails 和状态转换
+3. **Fallback 层** — `turn_end` handler 保留自动校验和兼容反馈
 
 ### 自动校验机制
 
@@ -207,7 +241,7 @@ LLM response → afterModel hook (FactVerificationMiddleware, priority 90)
 ```
 
 Standalone 模式下，FactVerificationMiddleware 自动注册，无需手动调用。
-PI Extension 模式下，core 的 turn_end 钩子额外提供 telemetry emit 和 sendUserMessage。
+PI Extension 目标模式下，`complete_phase` 承担主校验和推进职责；core 的 `turn_end` 钩子保留 telemetry emit、sendUserMessage 和 legacy fallback。
 
 ### Guardrails：越权检测
 
@@ -222,7 +256,7 @@ Phase end   → snapshotWorkspace() → after snapshot
 
 - `snapshotWorkspace()` — 遍历 workspace，跳过 `.git/`、`.harness-kit/`、`node_modules/`，记录 SHA256 哈希
 - `detectOutOfScope()` — 比较快照，过滤已声明文件，返回未声明变更
-- 仅信息性 — 不阻塞 phase 完成
+- 当前兼容路径中主要用于 telemetry；scheduler path 中应成为 phase 完成门禁的一部分
 
 ### Error Recovery
 
@@ -326,8 +360,8 @@ phases:
 
 | 组件 | 文件 | 职责 |
 |------|------|------|
-| Extension entry | `src/index.ts` | 注册工具、注入 workflow prompt、turn_end 自动验证 + telemetry |
-| Tool definitions | `src/tools.ts` | 4 PI tools (start_agent, acp_send, acp_read, hard_verify) |
+| Extension entry | `src/index.ts` | 当前注册工具、注入 workflow prompt、turn_end fallback + telemetry；目标承载 scheduler 推进 |
+| Tool definitions | `src/tools.ts` | 当前 PI tools: start_agent, acp_send, acp_read, hard_verify；scheduler path 将增加 complete_phase |
 | Pane manager | `src/pane.ts` | tmux/bridge subprocess 调用 |
 | Guardrails | `src/guardrails.ts` | Workspace 快照和越权文件检测 |
 | Workflow schema | `src/workflow-schema.ts` | TypeBox schemas for custom workflows |

@@ -64,6 +64,16 @@ brew install tmux
 apt install tmux
 ```
 
+### Phase 不推进（PI Extension 模式）
+
+**症状**：agent 已经完成工作，但 `.harness-kit/state.json` 中的 `currentPhase` 没有变化。
+
+**解决**：
+- 当前兼容路径下，检查 assistant 输出是否包含可解析的 `<HK_RESULT>`。
+- scheduler path 下，检查是否调用了 `complete_phase`。
+- 检查 facts 是否通过硬校验；校验失败时 phase 必须停留在当前阶段。
+- 检查 guardrail 事件是否报告了未声明文件变更。
+
 ## 测试问题
 
 ### 测试超时

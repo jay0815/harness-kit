@@ -13,10 +13,14 @@
 
 **症状**：agent 运行但不产出结果，状态一直是 PENDING。
 
-**原因**：LLM 没有输出 `<HK_RESULT>` 块。
+**原因**：
+- 当前兼容路径：LLM 没有输出 `<HK_RESULT>` 块。
+- 目标 scheduler path：LLM 没有调用 `complete_phase`，或者 `complete_phase` 拒绝了当前 phase completion。
 
 **排查**：
 - 检查 LLM 输出中是否包含 `<HK_RESULT>` 标签
+- 检查是否出现 `complete_phase` 工具调用
+- 检查 `.harness-kit/state.json` 中的 `currentPhase`
 - 检查 system prompt 是否正确注入
 - 尝试切换到更 capable 的模型
 
@@ -31,6 +35,7 @@
 **排查**：
 - 使用 `--verify warn` 模式查看失败详情
 - 检查 `state.metadata["fact_verification"]` 中的校验结果
+- scheduler path 下检查 `complete_phase` 的 tool result
 - 确认 agent 引用的文件确实存在
 
 ### 工具调用参数为空
@@ -59,7 +64,7 @@
 遥测事件写入 JSONL 文件，包含：
 - 校验结果
 - Guardrail 检测结果
-- Phase 转换
+- Phase 转换和 scheduler 决策
 - 工具调用
 
 ### 测试

@@ -107,9 +107,9 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/index.ts` | Extension entry — 注册工具、注入 workflow prompt、turn_end 自动验证 + telemetry |
+| `src/index.ts` | Extension entry — 当前注册工具、注入 workflow prompt、turn_end 自动验证 + telemetry；目标承载 phase scheduler |
 | `src/index.test.ts` | Extension 测试 |
-| `src/tools.ts` | 4 PI tools (start_agent, acp_send, acp_read, hard_verify) |
+| `src/tools.ts` | PI tools（当前：start_agent, acp_send, acp_read, hard_verify；计划新增 complete_phase） |
 | `src/tools.test.ts` | 工具测试（16 个用例） |
 | `src/pane.ts` | tmux/bridge subprocess 调用 |
 | `src/pane.test.ts` | Pane 测试（10 个用例） |

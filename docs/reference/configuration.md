@@ -173,4 +173,10 @@ phases:
 
 ### @harness-kit/core
 
-PI Extension 通过 `ExtensionAPI` 注册，无独立配置文件。工作流通过 YAML 加载。
+PI Extension 通过 `ExtensionAPI` 注册，无独立配置文件。当前工作流通过内置 workflow 或 YAML 加载。
+
+目标 scheduler path 使用 `.harness-kit/state.json` 作为 phase 状态的恢复源，并通过 `complete_phase` 工具推进 phase。配置原则：
+
+- PI 仍负责 provider、model、auth 和 Extension 加载。
+- harness-kit 负责 workflow、phase 状态、artifact 和校验结果。
+- phase 失败、校验失败和 guardrail 失败都停留在当前 phase，不隐式推进。

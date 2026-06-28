@@ -2,7 +2,7 @@
 
 > 让 coding agent 可靠运行的编排层。
 
-harness-kit 提供一个独立的 agent runtime 和可选的 PI Extension 层，通过结构化 workflow 和**硬事实校验**确保 agent 真实阅读了文件、没有编造事实。
+harness-kit 提供一个独立的 agent runtime 和可选的 PI Extension 层，通过结构化 workflow 和**硬事实校验**确保 agent 真实阅读了文件、没有编造事实。PI Extension 的目标形态是 phase scheduler/state machine，由 harness 管理 phase 边界和状态推进。
 
 ## 为什么从"编排外部 agent"转向"自己就是 agent"
 
@@ -21,7 +21,7 @@ harness-kit 提供一个独立的 agent runtime 和可选的 PI Extension 层，
 
 1. **Agent Runtime** — 独立的 agent loop，支持 middleware pipeline、工具执行、双 agent 架构（A 编排 / B 执行）
 2. **事实硬校验** — LLM 声明事实（文件路径+行号+原文），独立 CLI 实际读盘比对
-3. **PI Extension（可选）** — 在 PI 框架内运行时，注入 workflow system prompt、自动校验 `<HK_RESULT>` 输出
+3. **PI Extension（可选）** — 目标是在 PI 框架内作为 phase scheduler/state machine 管理 phase 边界、校验和重试
 
 ## 包结构
 
@@ -43,8 +43,9 @@ packages/
 
 ### @harness-kit/core
 
-PI Extension 层，包裹在 agent runtime 之上：
+PI Extension 层，接入 PI agent loop 的生命周期事件和工具系统。当前保留 `turn_end` 兼容路径，目标能力包括：
 
+- **phase scheduler** — harness 拥有 currentPhase、状态持久化、phase 完成/失败/确认边界
 - **`<HK_RESULT>` 校验** — 提取 agent 输出的事实声明，读盘逐字比对
 - **workspace guardrails** — 检测越界文件访问
 - **workflow 执行** — YAML 定义的多阶段 workflow（fail-stop、模板替换、dry-run）
@@ -106,6 +107,7 @@ pnpm run harness          # 运行 CLI
 |------|------|
 | [wiki](wiki/index.md) | 知识库索引：架构、技术栈、协议、设计决策 |
 | [design doc](docs/superpowers/specs/2026-05-02-harness-kit-design.md) | 完整架构设计、MVP 范围、演进路线 |
+| [Phase scheduler plan](docs/phase-scheduler-plan.md) | PI Extension 改造成硬 phase scheduler 的迭代计划 |
 | [Phase 3 plan](docs/phase3-plan.md) | standalone CLI 实现计划 |
 
 ## License
